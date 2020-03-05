@@ -1,0 +1,7 @@
+node_modules
+apify_storage
+.DS_Store
+.idea
+.vscode
+yarn.lock
+package-lock.json
