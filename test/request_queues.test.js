@@ -14,6 +14,8 @@ describe('RequestQueues', () => {
         });
         run = promisifyDbRun(client.db);
         get = promisify(client.db.get.bind(client.db));
+
+        // This is internal, but useful for tests.
         await client.requestQueues.initPromise;
     });
 
@@ -38,11 +40,12 @@ describe('RequestQueues', () => {
     });
 
     describe('methods', () => {
+        const dummyQ = 'dummy';
         let result;
         beforeEach(async () => {
             result = await run(`
                 INSERT INTO ${RESOURCE_TABLE_NAME}(name)
-                VALUES('dummy')
+                VALUES('${dummyQ}')
             `);
         });
         test('.getQueue works', async () => {
@@ -53,6 +56,29 @@ describe('RequestQueues', () => {
         test('.getQueue returns null for non-existent queues', async () => {
             const queue = await client.requestQueues.getQueue({ queueId: result.lastID + 1 });
             expect(queue).toBeNull();
+        });
+
+        test('.getOrCreateQueue returns existing queue by name', async () => {
+            const queue = await client.requestQueues.getOrCreateQueue({ queueName: dummyQ });
+            expect(queue.id).toBe(result.lastID);
+            const { queueCount } = await get(`SELECT COUNT(*) as queueCount FROM ${RESOURCE_TABLE_NAME}`);
+            expect(queueCount).toBe(1);
+        });
+
+        test('.getOrCreateQueue returns existing queue by ID', async () => {
+            const queue = await client.requestQueues.getOrCreateQueue({ queueName: result.lastID });
+            expect(queue.id).toBe(result.lastID);
+            const { queueCount } = await get(`SELECT COUNT(*) as queueCount FROM ${RESOURCE_TABLE_NAME}`);
+            expect(queueCount).toBe(1);
+        });
+
+        test('.getOrCreateQueue creates a new queue', async () => {
+            const queueName = `x${dummyQ}x`;
+            const queue = await client.requestQueues.getOrCreateQueue({ queueName });
+            expect(queue.id).toBe(result.lastID + 1);
+            expect(queue.name).toBe(queueName);
+            const { queueCount } = await get(`SELECT COUNT(*) as queueCount FROM ${RESOURCE_TABLE_NAME}`);
+            expect(queueCount).toBe(2);
         });
     });
 });

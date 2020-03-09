@@ -26,15 +26,18 @@ class RequestQueues {
 
     async getOrCreateQueue({ queueName }) {
         await this.initPromise;
+        const query = typeof queueName === 'number'
+            ? `id=${queueName}`
+            : `name='${queueName}'`;
         const queue = await this._get(`
             SELECT * FROM ${RESOURCE_TABLE_NAME}
-            WHERE id = ${queueName} OR name = '${queueName}'
+            WHERE ${query}
         `);
         if (queue) return queue;
         const queueId = await new Promise((resolve, reject) => {
             this.db.run(`
                 INSERT INTO ${RESOURCE_TABLE_NAME}(name)
-                VALUES(${queueName})
+                VALUES('${queueName}')
             `, function (err) { // eslint-disable-line prefer-arrow-callback
                 if (err) return reject(err);
                 resolve(this.lastID);
@@ -64,7 +67,7 @@ class RequestQueues {
             CREATE TABLE IF NOT EXISTS ${RESOURCE_TABLE_NAME}(
                 id INTEGER PRIMARY KEY,
                 name TEXT UNIQUE,
-                createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
+                createdAt TEXT DEFAULT(STRFTIME('%Y-%m-%d %H:%M:%f', 'NOW')),
                 modifiedAt TEXT,
                 accessedAt TEXT,
                 totalRequestCount INTEGER DEFAULT 0,
