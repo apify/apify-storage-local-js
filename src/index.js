@@ -1,40 +1,66 @@
+const Database = require('better-sqlite3');
 const path = require('path');
-const { promisify } = require('util');
-const sqlite3 = require('sqlite3');
+const ow = require('ow');
 const RequestQueues = require('./request_queues');
 
-const resourceClasses = {
-    requestQueues: RequestQueues,
-};
+/**
+ * @typedef {object} ApifyClientLocalOptions
+ * @property {string} [dbPath='./apify_storage/local.db']
+ *  Path to the database file. If it doesn't exist, it will be created
+ *  unless the memory option is true.
+ * @property {boolean} [debug=false]
+ *  Whether all SQL queries made by the database should be logged
+ *  to the console.
+ * @property {boolean} [memory=false]
+ *  If true, the database will only exist in memory. This is useful
+ *  for testing or for cases where persistence is not necessary,
+ *  such as short running tasks where it may improve performance.
+ */
+const apifyClientLocalOptions = ow.object.partialShape({
+    dbPath: ow.optional.string,
+    debug: ow.optional.boolean,
+    memory: ow.optional.boolean,
+});
 
 class ApifyClientLocal {
-    constructor(options = {}) {
+    /**
+     * @param {ApifyClientLocalOptions} options
+     */
+    constructor(options) {
+        ow(options, apifyClientLocalOptions);
         const {
             dbPath = './apify_storage/local.db',
             debug = false,
-            inMemory = false,
+            memory = false,
         } = options;
 
-        this.dbFilePath = inMemory
-            ? ':memory:'
-            : path.resolve(dbPath);
+        this.dbFilePath = path.resolve(dbPath);
+        const dbOptions = { memory };
+        if (debug) dbOptions.verbose = this._logDebug;
 
-        const sqlite = debug ? sqlite3.verbose() : sqlite3;
-        this.db = new sqlite.Database(this.dbFilePath, (err) => {
-            if (err) {
-                throw new Error(`Connection to local database could not be established at ${this.dbFilePath}\nCause: ${err.message}`);
-            }
-        });
+        try {
+            this.db = new Database(this.dbFilePath, dbOptions);
+            // WAL mode should greatly improve performance
+            // https://github.com/JoshuaWise/better-sqlite3/blob/master/docs/performance.md
+            this.db.pragma('journal_mode = WAL');
+        } catch (err) {
+            throw new Error(`Connection to local database could not be established at ${this.dbFilePath}\nCause: ${err.message}`);
+        }
 
-        // Create instances of individual resources
-        Object.entries(resourceClasses).forEach(([name, ResourceClass]) => {
-            this[name] = new ResourceClass(this.db);
-        });
+        this.requestQueues = new RequestQueues(this.db);
     }
 
-    async destroy() {
-        const close = promisify(this.db.close.bind(this.db));
-        await close();
+    /**
+     * Closes all existing database connections.
+     * Call close to gracefully exit when using
+     * a file system database (memory: false).
+     */
+    close() {
+        this.db.close();
+    }
+
+    _logDebug(statement) {
+        console.log(statement);
     }
 }
 
