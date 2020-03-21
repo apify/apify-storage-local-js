@@ -1,5 +1,6 @@
 node_modules
 apify_storage
+coverage
 .DS_Store
 .idea
 .vscode

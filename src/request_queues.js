@@ -1,9 +1,20 @@
 const ow = require('ow');
-const { TIME_FORMAT } = require('./consts');
+const { TIMESTAMP_SQL } = require('./consts');
 const { uniqueKeyToRequestId } = require('./utils');
 
 const RESOURCE_TABLE_NAME = 'RequestQueues';
 const REQUESTS_TABLE_NAME = 'RequestQueueRequests';
+
+const ERROR_REQUEST_NOT_UNIQUE = 'SQLITE_CONSTRAINT_PRIMARYKEY';
+const ERROR_QUEUE_DOES_NOT_EXIST = 'SQLITE_CONSTRAINT_FOREIGNKEY';
+
+const REQUEST_TYPES = {
+    url: ow.string,
+    uniqueKey: ow.string,
+    method: ow.optional.string,
+    retryCount: ow.optional.number,
+    handledAt: ow.any(ow.string.date, ow.date, ow.nullOrUndefined),
+};
 
 /**
  * @typedef {object} QueueHead
@@ -52,7 +63,10 @@ class RequestQueues {
      * @param {string} options.queueId
      * @returns {object|null}
      */
-    getQueue(options = {}) {
+    getQueue(options) {
+        ow(options, 'getQueue', ow.object.partialShape({
+            queueId: ow.string,
+        }));
         const { queueId } = options;
         const queue = this.selectQueueById.get(queueId);
         return queue || null;
@@ -63,7 +77,10 @@ class RequestQueues {
      * @param {string} options.queueName
      * @returns {object}
      */
-    getOrCreateQueue(options = {}) {
+    getOrCreateQueue(options) {
+        ow(options, 'getOrCreateQueue', ow.object.partialShape({
+            queueName: ow.string,
+        }));
         const { queueName } = options;
         const queue = this.selectQueueByName.get(queueName);
         if (queue) return queue;
@@ -75,7 +92,10 @@ class RequestQueues {
      * @param {object} options
      * @param {string} options.queueId
      */
-    deleteQueue(options = {}) {
+    deleteQueue(options) {
+        ow(options, 'deleteQueue', ow.object.partialShape({
+            queueId: ow.string,
+        }));
         const { queueId } = options;
         this.deleteQueueById.run(queueId);
     }
@@ -88,28 +108,18 @@ class RequestQueues {
      * @returns {QueueOperationInfo}
      */
     addRequest(options) {
-        ow(options, 'AddRequestOptions', ow.object.partialShape({
+        ow(options, 'addRequest', ow.object.partialShape({
             queueId: ow.string,
             request: ow.object.partialShape({
-                id: ow.undefined,
-                url: ow.string,
-                uniqueKey: ow.string,
+                id: ow.undefined, // <- this is different in updateRequest
+                ...REQUEST_TYPES,
             }),
             forefront: ow.optional.boolean,
         }));
 
         const { queueId, request, forefront = false } = options;
-
         const requestModel = this._createRequestModel(queueId, request, forefront);
-        let queueOperationInfo = new QueueOperationInfo(requestModel.id);
-
-        try {
-            this.insertRequestByModel.run(requestModel);
-        } catch (err) {
-            queueOperationInfo = this._handleInsertError(err, requestModel);
-        }
-
-        return queueOperationInfo;
+        return this.addRequestTransaction(requestModel);
     }
 
     /**
@@ -118,8 +128,13 @@ class RequestQueues {
      * @param {string} options.requestId
      * @returns {object}
      */
-    getRequest(options = {}) {
+    getRequest(options) {
+        ow(options, 'getRequest', ow.object.partialShape({
+            queueId: ow.string,
+            requestId: ow.string,
+        }));
         const { queueId, requestId } = options;
+        this.updateQueueAccessedAtById.run(queueId);
         const json = this.selectRequestJsonByModel.get({
             queueId,
             id: requestId,
@@ -134,9 +149,16 @@ class RequestQueues {
      * @param {boolean} [options.forefront=false]
      * @returns {QueueOperationInfo}
      */
-    updateRequest(options = {}) {
+    updateRequest(options) {
+        ow(options, 'addRequest', ow.object.partialShape({
+            queueId: ow.string,
+            request: ow.object.partialShape({
+                id: ow.string, // <- this is different in addRequest
+                ...REQUEST_TYPES,
+            }),
+            forefront: ow.optional.boolean,
+        }));
         const { queueId, request, forefront = false } = options;
-        // if (!request.id) throw new Error('request-id-missing');
         const requestModel = this._createRequestModel(queueId, request, forefront);
         return this.updateRequestTransaction(requestModel);
     }
@@ -147,10 +169,15 @@ class RequestQueues {
      * @param {number} [options.limit=100]
      * @returns {QueueHead}
      */
-    getHead(options = {}) {
+    getHead(options) {
+        ow(options, 'getHead', ow.object.partialShape({
+            queueId: ow.string,
+            limit: ow.optional.number,
+        }));
         const { queueId, limit = 100 } = options;
+        this.updateQueueAccessedAtById.run(queueId);
         const requestJsons = this.selectRequestJsonsByQueueIdWithLimit.all(queueId, limit);
-        const queueModifiedAt = new Date(); // TODO
+        const queueModifiedAt = this.selectQueueModifiedAtById.get(queueId);
         return {
             limit,
             queueModifiedAt,
@@ -169,7 +196,7 @@ class RequestQueues {
     _createRequestModel(queueId, request, forefront) {
         const orderNo = this._calculateOrderNo(request, forefront);
         const id = uniqueKeyToRequestId(request.uniqueKey);
-        if (request.id && id !== request.id) throw new Error('request-id-invalid');
+        if (request.id && id !== request.id) throw new Error('Request ID does not match its uniqueKey.');
         return {
             id,
             queueId,
@@ -198,34 +225,21 @@ class RequestQueues {
         return forefront ? -timestamp : timestamp;
     }
 
-    /**
-     * @param {Error} error
-     * @param {object} requestModel
-     * @returns {QueueOperationInfo}
-     * @private
-     */
-    _handleInsertError(error, requestModel) {
-        if (error.message !== 'TODO not unique') throw error;
-        const orderNo = this.selectRequestOrderNoByModel.get(requestModel);
-        return new QueueOperationInfo(requestModel.id, orderNo);
-    }
-
     _createTables() {
         this.db.prepare(`
             CREATE TABLE IF NOT EXISTS ${RESOURCE_TABLE_NAME}(
                 id INTEGER PRIMARY KEY,
                 name TEXT UNIQUE,
-                createdAt TEXT DEFAULT(STRFTIME('${TIME_FORMAT}', 'NOW')),
+                createdAt TEXT DEFAULT(${TIMESTAMP_SQL}),
                 modifiedAt TEXT,
                 accessedAt TEXT,
                 totalRequestCount INTEGER DEFAULT 0,
-                handledRequestCount INTEGER DEFAULT 0,
-                pendingRequestCount INTEGER DEFAULT 0
+                handledRequestCount INTEGER DEFAULT 0
             )
         `).run();
         this.db.prepare(`
             CREATE TABLE IF NOT EXISTS ${REQUESTS_TABLE_NAME}(
-                queueId INTEGER NOT NULL,
+                queueId INTEGER NOT NULL REFERENCES ${RESOURCE_TABLE_NAME}(id) ON DELETE CASCADE,
                 id TEXT NOT NULL,
                 orderNo INTEGER,
                 url TEXT NOT NULL,
@@ -239,24 +253,21 @@ class RequestQueues {
     }
 
     _createTriggers() {
-        this.db.prepare(`
-            CREATE TRIGGER IF NOT EXISTS T_update_modifiedAt_on_insert
-                AFTER INSERT ON ${REQUESTS_TABLE_NAME}
+        const getSqlForCommand = cmd => `
+        CREATE TRIGGER IF NOT EXISTS T_update_modifiedAt_on_${cmd.toLowerCase()}
+                AFTER ${cmd} ON ${REQUESTS_TABLE_NAME}
             BEGIN
                 UPDATE ${RESOURCE_TABLE_NAME}
-                SET modifiedAt = STRFTIME('${TIME_FORMAT}', 'NOW')
-                WHERE id = new.queueId;
+                SET modifiedAt = ${TIMESTAMP_SQL},
+                    accessedAt = ${TIMESTAMP_SQL}
+                WHERE id = ${cmd === 'DELETE' ? 'OLD' : 'NEW'}.queueId;
             END
-        `).run();
-        this.db.prepare(`
-            CREATE TRIGGER IF NOT EXISTS T_update_modifiedAt_on_update
-                AFTER UPDATE ON ${REQUESTS_TABLE_NAME}
-            BEGIN
-                UPDATE ${RESOURCE_TABLE_NAME}
-                SET modifiedAt = STRFTIME('${TIME_FORMAT}', 'NOW')
-                WHERE id = NEW.queueId;
-            END;
-        `).run();
+        `;
+
+        ['INSERT', 'UPDATE', 'DELETE'].forEach((cmd) => {
+            const sql = getSqlForCommand(cmd);
+            this.db.exec(sql);
+        });
     }
 
     _createIndexes() {
@@ -278,20 +289,28 @@ class RequestQueues {
             FROM ${RESOURCE_TABLE_NAME}
             WHERE name = ?
         `);
+        this.selectQueueModifiedAtById = this.db.prepare(`
+            SELECT modifiedAt FROM ${RESOURCE_TABLE_NAME}
+            WHERE id = ?
+        `).pluck();
         this.insertQueueByName = this.db.prepare(`
             INSERT INTO ${RESOURCE_TABLE_NAME}(name)
             VALUES(?)
         `);
         this.deleteQueueById = this.db.prepare(`
             DELETE FROM ${RESOURCE_TABLE_NAME}
-            WHERE id = ?
+            WHERE id = CAST(? as INTEGER)
         `);
-        this.insertRequestByModel = this.db.prepare(`
-            INSERT INTO ${REQUESTS_TABLE_NAME}(
-                id, queueId, orderNo, url, uniqueKey, method, retryCount, json
-            ) VALUES (
-                :id, CAST(:queueId as INTEGER), :orderNo, :url, :uniqueKey, :method, :retryCount, :json
-            )
+        this.adjustTotalAndHandledRequestCountsById = this.db.prepare(`
+            UPDATE ${RESOURCE_TABLE_NAME}
+            SET totalRequestCount = totalRequestCount + :totalAdjustment,
+                handledRequestCount = handledRequestCount + :handledAdjustment
+            WHERE id = CAST(:queueId as INTEGER)
+        `);
+        this.updateQueueAccessedAtById = this.db.prepare(`
+            UPDATE ${RESOURCE_TABLE_NAME}
+            SET accessedAt = ${TIMESTAMP_SQL}
+            WHERE id = CAST(? as INTEGER)
         `);
         this.selectRequestOrderNoByModel = this.db.prepare(`
             SELECT orderNo FROM ${REQUESTS_TABLE_NAME}
@@ -301,6 +320,18 @@ class RequestQueues {
             SELECT json FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = CAST(:queueId as INTEGER) AND id = :id
         `).pluck();
+        this.selectRequestJsonsByQueueIdWithLimit = this.db.prepare(`
+            SELECT json FROM ${REQUESTS_TABLE_NAME}
+            WHERE queueId = CAST(? as INTEGER) AND orderNo IS NOT NULL
+            LIMIT ?
+        `).pluck();
+        this.insertRequestByModel = this.db.prepare(`
+            INSERT INTO ${REQUESTS_TABLE_NAME}(
+                id, queueId, orderNo, url, uniqueKey, method, retryCount, json
+            ) VALUES (
+                :id, CAST(:queueId as INTEGER), :orderNo, :url, :uniqueKey, :method, :retryCount, :json
+            )
+        `);
         this.updateRequestByModel = this.db.prepare(`
             UPDATE ${REQUESTS_TABLE_NAME}
             SET orderNo = :orderNo,
@@ -311,26 +342,70 @@ class RequestQueues {
                 json = :json
             WHERE queueId = CAST(:queueId as INTEGER) AND id = :id
         `);
-        this.selectRequestJsonsByQueueIdWithLimit = this.db.prepare(`
-            SELECT json FROM ${REQUESTS_TABLE_NAME}
-            WHERE queueId = CAST(? as INTEGER) AND orderNo IS NOT NULL
-            LIMIT ?
-        `).pluck();
     }
 
     _prepareTransactions() {
-        this.updateRequestTransaction = this.db.transaction((requestModel) => {
-            const { changes } = this.updateRequestByModel.run(requestModel);
-            // No changes means the request wasn't there yet.
-            // We insert it, to behave the same as API.
-            if (changes === 0) {
+        this.addRequestTransaction = this.db.transaction((requestModel) => {
+            try {
                 this.insertRequestByModel.run(requestModel);
+                const handledCountAdjustment = requestModel.orderNo === null ? 1 : 0;
+                this._adjustRequestCounts(requestModel.queueId, 1, handledCountAdjustment);
+                // We return wasAlreadyHandled: false even though the request may
+                // have been added as handled, because that's how API behaves.
                 return new QueueOperationInfo(requestModel.id);
+            } catch (err) {
+                if (err.code === ERROR_REQUEST_NOT_UNIQUE) {
+                    // If we got here it means that the request was already present.
+                    // We need to figure out if it were handled too.
+                    const orderNo = this.selectRequestOrderNoByModel.get(requestModel);
+                    return new QueueOperationInfo(requestModel.id, orderNo);
+                }
+                if (err.code === ERROR_QUEUE_DOES_NOT_EXIST) {
+                    throw new Error(`Request queue with id: ${requestModel.queueId} does not exist.`);
+                }
+                throw err;
             }
-            // Now we know the request was there, so we need to
-            // check whether it was handled or not.
+        });
+        this.updateRequestTransaction = this.db.transaction((requestModel) => {
+            // First we need to check the existing request to be
+            // able to return information about its handled state.
             const orderNo = this.selectRequestOrderNoByModel.get(requestModel);
+
+            // Undefined means that the request is not present in the queue.
+            // We need to insert it, to behave the same as API.
+            if (orderNo === undefined) {
+                return this.addRequestTransaction(requestModel);
+            }
+
+            // When updating the request, we need to make sure that
+            // the handled counts are updated correctly in all cases.
+            this.updateRequestByModel.run(requestModel);
+            let handledCountAdjustment = 0;
+            const isRequestHandledStateChanging = typeof orderNo !== typeof requestModel.orderNo;
+            const requestWasHandledBeforeUpdate = orderNo === null;
+
+            if (isRequestHandledStateChanging) handledCountAdjustment += 1;
+            if (requestWasHandledBeforeUpdate) handledCountAdjustment = -handledCountAdjustment;
+            this._adjustRequestCounts(requestModel.queueId, 0, handledCountAdjustment);
+
+            // Again, it's important to return the state of the previous
+            // request, not the new one, because that's how API does it.
             return new QueueOperationInfo(requestModel.id, orderNo);
+        });
+    }
+
+    /**
+     * Exists to document and simplify the API of the SQL statement
+     * @param {string} queueId
+     * @param {number} totalAdjustment
+     * @param {number} handledAdjustment
+     * @private
+     */
+    _adjustRequestCounts(queueId, totalAdjustment, handledAdjustment) {
+        this.adjustTotalAndHandledRequestCountsById.run({
+            queueId,
+            totalAdjustment,
+            handledAdjustment,
         });
     }
 }

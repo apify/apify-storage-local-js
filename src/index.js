@@ -4,10 +4,14 @@ const ow = require('ow');
 const RequestQueues = require('./request_queues');
 
 /**
- * @typedef {object} ApifyClientLocalOptions
- * @property {string} [dbPath='./apify_storage/local.db']
- *  Path to the database file. If it doesn't exist, it will be created
- *  unless the memory option is true.
+ * @typedef {object} ApifyStorageLocalOptions
+ * @property {string} [dbDirectoryPath='./apify_storage']
+ *  Path to directory where the database file will be created,
+ *  unless either the inMemory option is true or the file
+ *  already exists.
+ * @property {string} [dbFilename='db.sqlite']
+ *  Custom filename for your database. Useful when you want to
+ *  keep multiple databases for any reason.
  * @property {boolean} [debug=false]
  *  Whether all SQL queries made by the database should be logged
  *  to the console.
@@ -16,26 +20,28 @@ const RequestQueues = require('./request_queues');
  *  for testing or for cases where persistence is not necessary,
  *  such as short running tasks where it may improve performance.
  */
-const apifyClientLocalOptions = ow.object.partialShape({
-    dbPath: ow.optional.string,
-    debug: ow.optional.boolean,
-    memory: ow.optional.boolean,
-});
 
-class ApifyClientLocal {
+class ApifyStorageLocal {
     /**
-     * @param {ApifyClientLocalOptions} options
+     * @param {ApifyStorageLocalOptions} options
      */
     constructor(options) {
-        ow(options, apifyClientLocalOptions);
+        ow(options, ow.object.partialShape({
+            dbDirectoryPath: ow.optional.string,
+            dbFilename: ow.optional.string,
+            debug: ow.optional.boolean,
+            memory: ow.optional.boolean,
+        }));
+
         const {
-            dbPath = './apify_storage/local.db',
+            dbDirectoryPath = './apify_storage',
+            dbFilename = 'db.sqlite',
             debug = false,
-            memory = false,
+            inMemory = false,
         } = options;
 
-        this.dbFilePath = path.resolve(dbPath);
-        const dbOptions = { memory };
+        this.dbFilePath = path.resolve(dbDirectoryPath, dbFilename);
+        const dbOptions = { memory: inMemory };
         if (debug) dbOptions.verbose = this._logDebug;
 
         try {
@@ -43,6 +49,7 @@ class ApifyClientLocal {
             // WAL mode should greatly improve performance
             // https://github.com/JoshuaWise/better-sqlite3/blob/master/docs/performance.md
             this.db.pragma('journal_mode = WAL');
+            this.db.pragma('foreign_keys = ON');
         } catch (err) {
             throw new Error(`Connection to local database could not be established at ${this.dbFilePath}\nCause: ${err.message}`);
         }
@@ -55,7 +62,7 @@ class ApifyClientLocal {
      * Call close to gracefully exit when using
      * a file system database (memory: false).
      */
-    close() {
+    closeDb() {
         this.db.close();
     }
 
@@ -64,4 +71,4 @@ class ApifyClientLocal {
     }
 }
 
-module.exports = ApifyClientLocal;
+module.exports = ApifyStorageLocal;
