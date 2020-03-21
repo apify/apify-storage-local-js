@@ -15,7 +15,7 @@ const RequestQueues = require('./request_queues');
  * @property {boolean} [debug=false]
  *  Whether all SQL queries made by the database should be logged
  *  to the console.
- * @property {boolean} [memory=false]
+ * @property {boolean} [inMemory=false]
  *  If true, the database will only exist in memory. This is useful
  *  for testing or for cases where persistence is not necessary,
  *  such as short running tasks where it may improve performance.
@@ -30,7 +30,7 @@ class ApifyStorageLocal {
             dbDirectoryPath: ow.optional.string,
             dbFilename: ow.optional.string,
             debug: ow.optional.boolean,
-            memory: ow.optional.boolean,
+            inMemory: ow.optional.boolean,
         }));
 
         const {
