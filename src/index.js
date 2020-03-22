@@ -1,6 +1,7 @@
 const Database = require('better-sqlite3');
-const path = require('path');
+const fs = require('fs');
 const ow = require('ow');
+const path = require('path');
 const RequestQueues = require('./request_queues');
 
 /**
@@ -41,29 +42,58 @@ class ApifyStorageLocal {
         } = options;
 
         this.dbFilePath = path.resolve(dbDirectoryPath, dbFilename);
-        const dbOptions = { memory: inMemory };
-        if (debug) dbOptions.verbose = this._logDebug;
+        this.inMemory = inMemory;
+        this.debug = debug;
+        this.connectDatabase();
+    }
 
+    /**
+     * Connects to an existing database, or creates a new one.
+     * It's called automatically when {@link ApifyStorageLocal} instance
+     * is constructed. Calling manually is useful after you call
+     * {@link ApifyStorageLocal#dropDatabase} to get a clean slate.
+     */
+    connectDatabase() {
+        const dbOptions = { memory: this.inMemory };
+        if (this.debug) dbOptions.verbose = this._logDebug;
         try {
             this.db = new Database(this.dbFilePath, dbOptions);
-            // WAL mode should greatly improve performance
-            // https://github.com/JoshuaWise/better-sqlite3/blob/master/docs/performance.md
-            this.db.pragma('journal_mode = WAL');
-            this.db.pragma('foreign_keys = ON');
         } catch (err) {
             throw new Error(`Connection to local database could not be established at ${this.dbFilePath}\nCause: ${err.message}`);
         }
-
+        // WAL mode should greatly improve performance
+        // https://github.com/JoshuaWise/better-sqlite3/blob/master/docs/performance.md
+        this.db.pragma('journal_mode = WAL');
+        this.db.pragma('foreign_keys = ON');
         this.requestQueues = new RequestQueues(this.db);
     }
 
     /**
-     * Closes all existing database connections.
-     * Call close to gracefully exit when using
-     * a file system database (memory: false).
+     * Closes database connection and keeps the data when using
+     * a file system database. In memory data are lost. Should
+     * be called at the end of use to allow the process to exit
+     * gracefully. No further database operations will be executed.
+     *
+     * Call {@link ApifyStorageLocal#connectDatabase} or create a new
+     * {@link ApifyStorageLocal} instance to get a new database connection.
      */
-    closeDb() {
+    closeDatabase() {
         this.db.close();
+    }
+
+    /**
+     * Closes the database connection and removes all data.
+     * With file system databases, it deletes the database file.
+     * No further database operations will be executed.
+     *
+     * Call {@link ApifyStorageLocal#connectDatabase} or create a new
+     * {@link ApifyStorageLocal} instance to create a new database.
+     */
+    dropDatabase() {
+        this.db.close();
+        if (!this.inMemory) {
+            fs.unlinkSync(this.dbFilePath);
+        }
     }
 
     _logDebug(statement) {

@@ -63,7 +63,7 @@ class RequestQueues {
      * @param {string} options.queueId
      * @returns {object|null}
      */
-    getQueue(options) {
+    async getQueue(options) {
         ow(options, 'getQueue', ow.object.partialShape({
             queueId: ow.string,
         }));
@@ -75,9 +75,9 @@ class RequestQueues {
     /**
      * @param {object} options
      * @param {string} options.queueName
-     * @returns {object}
+     * @returns {Promise<object>}
      */
-    getOrCreateQueue(options) {
+    async getOrCreateQueue(options) {
         ow(options, 'getOrCreateQueue', ow.object.partialShape({
             queueName: ow.string,
         }));
@@ -91,8 +91,9 @@ class RequestQueues {
     /**
      * @param {object} options
      * @param {string} options.queueId
+     * @returns {Promise<object>}
      */
-    deleteQueue(options) {
+    async deleteQueue(options) {
         ow(options, 'deleteQueue', ow.object.partialShape({
             queueId: ow.string,
         }));
@@ -105,9 +106,9 @@ class RequestQueues {
      * @param {string} options.queueId
      * @param {object} options.request
      * @param {boolean} [options.forefront=false]
-     * @returns {QueueOperationInfo}
+     * @returns {Promise<QueueOperationInfo>}
      */
-    addRequest(options) {
+    async addRequest(options) {
         ow(options, 'addRequest', ow.object.partialShape({
             queueId: ow.string,
             request: ow.object.partialShape({
@@ -126,9 +127,9 @@ class RequestQueues {
      * @param {object} options
      * @param {string} options.queueId
      * @param {string} options.requestId
-     * @returns {object}
+     * @returns {Promise<object>}
      */
-    getRequest(options) {
+    async getRequest(options) {
         ow(options, 'getRequest', ow.object.partialShape({
             queueId: ow.string,
             requestId: ow.string,
@@ -147,9 +148,9 @@ class RequestQueues {
      * @param {string} options.queueId
      * @param {object} options.request
      * @param {boolean} [options.forefront=false]
-     * @returns {QueueOperationInfo}
+     * @returns {Promise<QueueOperationInfo>}
      */
-    updateRequest(options) {
+    async updateRequest(options) {
         ow(options, 'addRequest', ow.object.partialShape({
             queueId: ow.string,
             request: ow.object.partialShape({
@@ -167,9 +168,9 @@ class RequestQueues {
      * @param {object} options
      * @param {string} options.queueId
      * @param {number} [options.limit=100]
-     * @returns {QueueHead}
+     * @returns {Promise<QueueHead>}
      */
-    getHead(options) {
+    async getHead(options) {
         ow(options, 'getHead', ow.object.partialShape({
             queueId: ow.string,
             limit: ow.optional.number,
