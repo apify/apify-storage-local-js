@@ -73,17 +73,20 @@ class RequestQueues {
     }
 
     /**
-     * @param {object} options
-     * @param {string} options.queueName
+     * @param {object} [options]
+     * @param {string} [options.queueName]
      * @returns {Promise<object>}
      */
     async getOrCreateQueue(options) {
-        ow(options, 'getOrCreateQueue', ow.object.partialShape({
-            queueName: ow.string,
+        ow(options, 'getOrCreateQueue', ow.optional.object.partialShape({
+            queueName: ow.optional.string,
         }));
         const { queueName } = options;
-        const queue = this.selectQueueByName.get(queueName);
-        if (queue) return queue;
+        if (queueName) {
+            const queue = this.selectQueueByName.get(queueName);
+            if (queue) return queue;
+        }
+
         const { lastInsertRowid } = this.insertQueueByName.run(queueName);
         return this.selectQueueById.get(lastInsertRowid);
     }

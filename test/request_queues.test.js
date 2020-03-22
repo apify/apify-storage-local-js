@@ -262,11 +262,19 @@ describe('getOrCreateQueue', () => {
         expect(count).toBe(2);
     });
 
-    test('creates a new queue', async () => {
+    test('creates a new queue with name', async () => {
         const queueName = 'third';
         const queue = await storageLocal.requestQueues.getOrCreateQueue({ queueName });
         expect(queue.id).toBe('3');
         expect(queue.name).toBe(queueName);
+        const count = counter.queues();
+        expect(count).toBe(3);
+    });
+
+    test('creates a new queue without name', async () => {
+        const queue = await storageLocal.requestQueues.getOrCreateQueue({});
+        expect(queue.id).toBe('3');
+        expect(queue.name).toBeNull();
         const count = counter.queues();
         expect(count).toBe(3);
     });
