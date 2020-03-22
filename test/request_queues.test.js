@@ -275,8 +275,11 @@ describe('deleteQueue', () => {
 describe('addRequest', () => {
     const queueId = '1';
     const startCount = TEST_QUEUES[queueId].requestCount;
+    const request = numToRequest(1);
+    const requestId = request.id;
+    delete request.id;
 
-    test('adds a request', () => {
+    test('adds a request', () => { /* eslint-disable no-shadow */
         const request = numToRequest(startCount + 1);
         const requestId = request.id;
         delete request.id;
@@ -291,10 +294,6 @@ describe('addRequest', () => {
     });
 
     test('succeeds when request is already present', () => {
-        const request = numToRequest(1);
-        const requestId = request.id;
-        delete request.id;
-
         const queueOperationInfo = client.requestQueues.addRequest({ queueId, request });
         expect(queueOperationInfo).toEqual({
             requestId,
@@ -304,11 +303,27 @@ describe('addRequest', () => {
         expect(counter.requests(queueId)).toBe(startCount);
     });
 
+    test('does not update request values when present', () => {
+        const newRequest = {
+            ...request,
+            handledAt: new Date(),
+            method: 'POST',
+        };
+
+        client.requestQueues.addRequest({ queueId, request: newRequest });
+        const requestModel = prepare(`
+            SELECT * FROM ${REQUESTS_TABLE_NAME}
+            WHERE queueId = ? AND id = ?
+        `).get(queueId, requestId);
+
+        expect(requestModel.id).toBe(requestId);
+        expect(requestModel.method).toBe('GET');
+        expect(typeof requestModel.orderNo).toBe('number');
+        expect(JSON.parse(requestModel.json)).toEqual({ ...request, id: requestId, handledAt: undefined });
+    });
+
     test('succeeds when request is already handled', () => {
-        const request = numToRequest(1);
-        const requestId = request.id;
         markRequestHandled(queueId, requestId);
-        delete request.id;
 
         const queueOperationInfo = client.requestQueues.addRequest({ queueId, request });
         expect(queueOperationInfo).toEqual({
@@ -320,10 +335,7 @@ describe('addRequest', () => {
     });
 
     test('returns wasAlreadyHandled: false when request is added handled', () => {
-        const request = numToRequest(1);
         request.handledAt = new Date();
-        const requestId = request.id;
-        delete request.id;
 
         const queueOperationInfo = client.requestQueues.addRequest({ queueId, request });
         expect(queueOperationInfo).toEqual({
@@ -332,6 +344,21 @@ describe('addRequest', () => {
             wasAlreadyHandled: false,
         });
         expect(counter.requests(queueId)).toBe(startCount);
+    });
+
+    test('forefront adds request to queue head', () => { /* eslint-disable no-shadow */
+        const request = numToRequest(startCount + 1);
+        const requestId = request.id;
+        delete request.id;
+
+        client.requestQueues.addRequest({ queueId, request, forefront: true });
+        expect(counter.requests(queueId)).toBe(startCount + 1);
+        const firstId = prepare(`
+            SELECT id FROM ${REQUESTS_TABLE_NAME}
+            WHERE queueId = ? AND orderNo IS NOT NULL
+            LIMIT 1
+        `).pluck().get(queueId);
+        expect(firstId).toBe(requestId);
     });
 
     describe('throws', () => {
@@ -400,7 +427,7 @@ describe('updateRequest', () => {
 
     beforeEach(() => {
         request = {
-            ...numToRequest(0),
+            ...numToRequest(1),
             retryCount,
             method,
         };
@@ -460,6 +487,17 @@ describe('updateRequest', () => {
             wasAlreadyHandled: false,
         });
         expect(counter.requests(queueId)).toBe(startCount);
+    });
+
+    test('forefront moves request to queue head', () => {
+        client.requestQueues.updateRequest({ queueId, request, forefront: true });
+        expect(counter.requests(queueId)).toBe(startCount);
+        const requestId = prepare(`
+            SELECT id FROM ${REQUESTS_TABLE_NAME}
+            WHERE queueId = ? AND orderNo IS NOT NULL
+            LIMIT 1
+        `).pluck().get(queueId);
+        expect(requestId).toBe(request.id);
     });
 
     describe('throws', () => {
