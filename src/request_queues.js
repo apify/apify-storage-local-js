@@ -235,7 +235,8 @@ class RequestQueues {
                 modifiedAt TEXT,
                 accessedAt TEXT,
                 totalRequestCount INTEGER DEFAULT 0,
-                handledRequestCount INTEGER DEFAULT 0
+                handledRequestCount INTEGER DEFAULT 0,
+                pendingRequestCount INTEGER GENERATED ALWAYS AS (totalRequestCount - handledRequestCount) VIRTUAL
             )
         `).run();
         this.db.prepare(`

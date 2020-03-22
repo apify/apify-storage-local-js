@@ -144,7 +144,7 @@ describe('request counts:', () => {
     let selectRequestCounts;
     beforeEach(() => {
         selectRequestCounts = prepare(`
-            SELECT totalRequestCount, handledRequestCount FROM ${RESOURCE_TABLE_NAME}
+            SELECT totalRequestCount, handledRequestCount, pendingRequestCount FROM ${RESOURCE_TABLE_NAME}
             WHERE id = ?
         `);
     });
@@ -155,11 +155,13 @@ describe('request counts:', () => {
         let counts = selectRequestCounts.get(queueId);
         expect(counts.totalRequestCount).toBe(startCount);
         expect(counts.handledRequestCount).toBe(0);
+        expect(counts.pendingRequestCount).toBe(startCount);
 
         storageLocal.requestQueues.getHead({ queueId });
         counts = selectRequestCounts.get(queueId);
         expect(counts.totalRequestCount).toBe(startCount);
         expect(counts.handledRequestCount).toBe(0);
+        expect(counts.pendingRequestCount).toBe(startCount);
     });
 
     test('adding request increments totalRequestCount', async () => {
@@ -170,6 +172,7 @@ describe('request counts:', () => {
         const counts = selectRequestCounts.get(queueId);
         expect(counts.totalRequestCount).toBe(startCount + 1);
         expect(counts.handledRequestCount).toBe(0);
+        expect(counts.pendingRequestCount).toBe(startCount + 1);
     });
 
     test('adding handled request increments handledRequestCount', async () => {
@@ -181,6 +184,7 @@ describe('request counts:', () => {
         const counts = selectRequestCounts.get(queueId);
         expect(counts.totalRequestCount).toBe(startCount + 1);
         expect(counts.handledRequestCount).toBe(1);
+        expect(counts.pendingRequestCount).toBe(startCount);
     });
 
     test('handling of unhandled request increments handledRequestCount', async () => {
@@ -191,6 +195,7 @@ describe('request counts:', () => {
         const counts = selectRequestCounts.get(queueId);
         expect(counts.totalRequestCount).toBe(startCount);
         expect(counts.handledRequestCount).toBe(1);
+        expect(counts.pendingRequestCount).toBe(startCount - 1);
     });
 
     test('handling of a handled request is a no-op', async () => {
@@ -204,6 +209,7 @@ describe('request counts:', () => {
         counts = selectRequestCounts.get(queueId);
         expect(counts.totalRequestCount).toBe(startCount);
         expect(counts.handledRequestCount).toBe(1);
+        expect(counts.pendingRequestCount).toBe(startCount - 1);
     });
 
     test('un-handling of a handled request decrements handledRequestCount', async () => {
@@ -217,6 +223,7 @@ describe('request counts:', () => {
         counts = selectRequestCounts.get(queueId);
         expect(counts.totalRequestCount).toBe(startCount);
         expect(counts.handledRequestCount).toBe(0);
+        expect(counts.pendingRequestCount).toBe(startCount);
     });
 
     test('un-handling of a not handled request is a no-op', async () => {
@@ -227,6 +234,7 @@ describe('request counts:', () => {
         const counts = selectRequestCounts.get(queueId);
         expect(counts.totalRequestCount).toBe(startCount);
         expect(counts.handledRequestCount).toBe(0);
+        expect(counts.pendingRequestCount).toBe(startCount);
     });
 });
 
