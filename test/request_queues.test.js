@@ -442,13 +442,22 @@ describe('addRequest', () => {
 });
 
 describe('getRequest', () => {
-    test('works', async () => {
+    const queueId = '1';
+    const startCount = TEST_QUEUES[queueId].requestCount;
+
+    test('gets requests', async () => {
         let expectedReq = numToRequest(3);
-        let request = await storageLocal.requestQueues.getRequest({ queueId: '1', requestId: expectedReq.id });
+        let request = await storageLocal.requestQueues.getRequest({ queueId, requestId: expectedReq.id });
         expect(request).toEqual(expectedReq);
         expectedReq = numToRequest(30);
         request = await storageLocal.requestQueues.getRequest({ queueId: '2', requestId: expectedReq.id });
         expect(request).toEqual(expectedReq);
+    });
+
+    test('returns null for non-existent requests', async () => {
+        const expectedReq = numToRequest(startCount + 1);
+        const request = await storageLocal.requestQueues.getRequest({ queueId: '1', requestId: expectedReq.id });
+        expect(request).toEqual(null);
     });
 });
 

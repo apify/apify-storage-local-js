@@ -61,7 +61,7 @@ class RequestQueues {
     /**
      * @param {object} options
      * @param {string} options.queueId
-     * @returns {object|null}
+     * @returns {Promise<object|null>}
      */
     async getQueue(options) {
         ow(options, 'getQueue', ow.object.partialShape({
@@ -130,7 +130,7 @@ class RequestQueues {
      * @param {object} options
      * @param {string} options.queueId
      * @param {string} options.requestId
-     * @returns {Promise<object>}
+     * @returns {Promise<object|null>}
      */
     async getRequest(options) {
         ow(options, 'getRequest', ow.object.partialShape({
@@ -143,7 +143,7 @@ class RequestQueues {
             queueId,
             id: requestId,
         });
-        return JSON.parse(json);
+        return json ? JSON.parse(json) : null;
     }
 
     /**
