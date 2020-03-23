@@ -166,7 +166,7 @@ describe('request counts:', () => {
 
     test('adding request increments totalRequestCount', async () => {
         const request = numToRequest(startCount + 5);
-        delete request.id;
+        request.id = undefined;
 
         await storageLocal.requestQueues.addRequest({ queueId, request });
         const counts = selectRequestCounts.get(queueId);
@@ -177,7 +177,7 @@ describe('request counts:', () => {
 
     test('adding handled request increments handledRequestCount', async () => {
         const request = numToRequest(startCount + 5);
-        delete request.id;
+        request.id = undefined;
         request.handledAt = new Date();
 
         await storageLocal.requestQueues.addRequest({ queueId, request });
@@ -293,12 +293,12 @@ describe('addRequest', () => {
     const startCount = TEST_QUEUES[queueId].requestCount;
     const request = numToRequest(1);
     const requestId = request.id;
-    delete request.id;
+    request.id = undefined;
 
     test('adds a request', async () => { /* eslint-disable no-shadow */
         const request = numToRequest(startCount + 1);
         const requestId = request.id;
-        delete request.id;
+        request.id = undefined;
 
         const queueOperationInfo = await storageLocal.requestQueues.addRequest({ queueId, request });
         expect(queueOperationInfo).toEqual({
@@ -322,7 +322,7 @@ describe('addRequest', () => {
 
         const savedRequest = JSON.parse(requestModel.json);
         expect(savedRequest.id).toBe(requestId);
-        expect(savedRequest).toMatchObject(request);
+        expect(savedRequest).toMatchObject({ ...request, id: requestId });
     });
 
     test('succeeds when request is already present', async () => {
@@ -353,7 +353,7 @@ describe('addRequest', () => {
 
         const savedRequest = JSON.parse(requestModel.json);
         expect(savedRequest.id).toBe(requestId);
-        expect(savedRequest).toMatchObject(request);
+        expect(savedRequest).toMatchObject({ ...request, id: requestId });
     });
 
     test('succeeds when request is already handled', async () => {
@@ -383,7 +383,7 @@ describe('addRequest', () => {
     test('forefront adds request to queue head', async () => { /* eslint-disable no-shadow */
         const request = numToRequest(startCount + 1);
         const requestId = request.id;
-        delete request.id;
+        request.id = undefined;
 
         await storageLocal.requestQueues.addRequest({ queueId, request, forefront: true });
         expect(counter.requests(queueId)).toBe(startCount + 1);
@@ -399,7 +399,7 @@ describe('addRequest', () => {
         let request;
         beforeEach(() => {
             request = numToRequest(startCount + 1);
-            delete request.id;
+            request.id = undefined;
         });
 
         test('on missing url', async () => {
@@ -554,7 +554,7 @@ describe('updateRequest', () => {
             }
         });
         test('when id is not provided', async () => {
-            delete request.id;
+            request.id = undefined;
             try {
                 await storageLocal.requestQueues.updateRequest({ queueId, request });
                 throw new Error('wrong-error');
