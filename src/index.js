@@ -77,8 +77,8 @@ class ApifyStorageLocal {
         }
         // WAL mode should greatly improve performance
         // https://github.com/JoshuaWise/better-sqlite3/blob/master/docs/performance.md
-        this.db.pragma('journal_mode = WAL');
-        this.db.pragma('foreign_keys = ON');
+        this.db.exec('PRAGMA journal_mode = WAL');
+        this.db.exec('PRAGMA foreign_keys = ON');
         this.requestQueues = new RequestQueues(this.db);
     }
 

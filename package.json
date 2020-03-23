@@ -32,7 +32,7 @@
         "src"
     ],
     "scripts": {
-        "test": "jest index && jest request_queues",
+        "test": "jest --coverage",
         "lint": "eslint ./src ./test",
         "lint:fix": "eslint ./src ./test --ext .js --fix"
     },
