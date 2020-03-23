@@ -307,6 +307,22 @@ describe('addRequest', () => {
             wasAlreadyHandled: false,
         });
         expect(counter.requests(queueId)).toBe(startCount + 1);
+
+        const requestModel = prepare(`
+            SELECT * FROM ${REQUESTS_TABLE_NAME}
+            WHERE queueId = ? AND id = ?
+        `).get(queueId, requestId);
+        expect(requestModel.queueId).toBe(Number(queueId));
+        expect(requestModel.id).toBe(requestId);
+        expect(requestModel.url).toBe(request.url);
+        expect(requestModel.uniqueKey).toBe(request.uniqueKey);
+        expect(requestModel.retryCount).toBe(0);
+        expect(requestModel.method).toBe('GET');
+        expect(typeof requestModel.orderNo).toBe('number');
+
+        const savedRequest = JSON.parse(requestModel.json);
+        expect(savedRequest.id).toBe(requestId);
+        expect(savedRequest).toMatchObject(request);
     });
 
     test('succeeds when request is already present', async () => {
@@ -331,11 +347,13 @@ describe('addRequest', () => {
             SELECT * FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ? AND id = ?
         `).get(queueId, requestId);
-
         expect(requestModel.id).toBe(requestId);
         expect(requestModel.method).toBe('GET');
         expect(typeof requestModel.orderNo).toBe('number');
-        expect(JSON.parse(requestModel.json)).toEqual({ ...request, id: requestId, handledAt: undefined });
+
+        const savedRequest = JSON.parse(requestModel.json);
+        expect(savedRequest.id).toBe(requestId);
+        expect(savedRequest).toMatchObject(request);
     });
 
     test('succeeds when request is already handled', async () => {

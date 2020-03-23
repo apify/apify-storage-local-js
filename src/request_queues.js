@@ -201,6 +201,7 @@ class RequestQueues {
         const orderNo = this._calculateOrderNo(request, forefront);
         const id = uniqueKeyToRequestId(request.uniqueKey);
         if (request.id && id !== request.id) throw new Error('Request ID does not match its uniqueKey.');
+        const json = JSON.stringify({ id, ...request });
         return {
             id,
             queueId,
@@ -209,7 +210,7 @@ class RequestQueues {
             uniqueKey: request.uniqueKey,
             method: request.method,
             retryCount: request.retryCount,
-            json: JSON.stringify(request),
+            json,
         };
     }
 
