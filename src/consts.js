@@ -5,7 +5,7 @@
 exports.REQUEST_ID_LENGTH = 15;
 
 /**
- * Time format pattern for SQLite STRFTIME timestamps.
+ * SQL that produces a timestamp in the correct format.
  * @type {string}
  */
-exports.TIME_FORMAT = '%Y-%m-%dT%H:%M:%fZ';
+exports.TIMESTAMP_SQL = "STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'NOW')";
