@@ -69,7 +69,7 @@ class RequestQueues {
         }));
         const { queueId } = options;
         const queue = this.selectQueueById.get(queueId);
-        return queue || null;
+        return fixQueue(queue);
     }
 
     /**
@@ -84,11 +84,12 @@ class RequestQueues {
         const { queueName } = options;
         if (queueName) {
             const queue = this.selectQueueByName.get(queueName);
-            if (queue) return queue;
+            if (queue) return fixQueue(queue);
         }
 
         const { lastInsertRowid } = this.insertQueueByName.run(queueName);
-        return this.selectQueueById.get(lastInsertRowid);
+        const queue = this.selectQueueById.get(lastInsertRowid);
+        return fixQueue(queue);
     }
 
     /**
@@ -239,8 +240,7 @@ class RequestQueues {
                 modifiedAt TEXT,
                 accessedAt TEXT,
                 totalRequestCount INTEGER DEFAULT 0,
-                handledRequestCount INTEGER DEFAULT 0,
-                pendingRequestCount INTEGER GENERATED ALWAYS AS (totalRequestCount - handledRequestCount) VIRTUAL
+                handledRequestCount INTEGER DEFAULT 0
             )
         `).run();
         this.db.prepare(`
@@ -418,3 +418,12 @@ class RequestQueues {
 RequestQueues.RESOURCE_TABLE_NAME = RESOURCE_TABLE_NAME;
 RequestQueues.REQUESTS_TABLE_NAME = REQUESTS_TABLE_NAME;
 module.exports = RequestQueues;
+
+// TODO remove when some GUI supports Generated columns https://sqlite.org/gencol.html
+function fixQueue(queue) {
+    if (queue) {
+        queue.pendingRequestCount = queue.totalRequestCount - queue.handledRequestCount;
+        return queue;
+    }
+    return null;
+}
