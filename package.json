@@ -1,6 +1,6 @@
 {
     "name": "@apify/storage-local",
-    "version": "0.0.1",
+    "version": "0.1.1",
     "description": "Drop in replacement of Apify API with a local SQLite database. Not all API features are supported.",
     "engines": {
         "node": ">=10.17.0"
@@ -32,7 +32,7 @@
         "src"
     ],
     "scripts": {
-        "test": "jest index && jest request_queues",
+        "test": "jest --coverage",
         "lint": "eslint ./src ./test",
         "lint:fix": "eslint ./src ./test --ext .js --fix"
     },

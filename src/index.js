@@ -13,11 +13,11 @@ const DATABASE_FILE_SUFFIXES = ['-shm', '-wal'];
 
 /**
  * @typedef {object} ApifyStorageLocalOptions
- * @property {string} [dbDirectoryPath='./apify_storage']
- *  Path to directory where the database file will be created,
- *  unless either the inMemory option is true or the file
- *  already exists.
- * @property {string} [dbFilename='db.sqlite']
+ * @property {string} [storageDir='./apify_storage']
+ *  Path to directory where the database files will be created,
+ *  unless either the inMemory option is true or the files
+ *  already exist.
+ * @property {string} [storageName='db.sqlite']
  *  Custom filename for your database. Useful when you want to
  *  keep multiple databases for any reason. Note that 2 other
  *  files are created by the database that enable higher performance.
@@ -40,22 +40,22 @@ class ApifyStorageLocal {
      */
     constructor(options) {
         ow(options, 'ApifyStorageLocalOptions', ow.optional.object.partialShape({
-            dbDirectoryPath: ow.optional.string,
-            dbFilename: ow.optional.string,
+            storageDir: ow.optional.string,
+            storageName: ow.optional.string,
             debug: ow.optional.boolean,
             inMemory: ow.optional.boolean,
         }));
 
         const {
-            dbDirectoryPath = './apify_storage',
-            dbFilename = 'db.sqlite',
+            storageDir = './apify_storage',
+            storageName = 'db.sqlite',
             debug = false,
             inMemory = false,
         } = options;
 
         this.dbFilePath = inMemory
             ? ':memory:'
-            : path.resolve(dbDirectoryPath, dbFilename);
+            : path.resolve(storageDir, storageName);
         this.inMemory = inMemory;
         this.debug = debug;
         this.connectDatabase();
@@ -77,8 +77,8 @@ class ApifyStorageLocal {
         }
         // WAL mode should greatly improve performance
         // https://github.com/JoshuaWise/better-sqlite3/blob/master/docs/performance.md
-        this.db.pragma('journal_mode = WAL');
-        this.db.pragma('foreign_keys = ON');
+        this.db.exec('PRAGMA journal_mode = WAL');
+        this.db.exec('PRAGMA foreign_keys = ON');
         this.requestQueues = new RequestQueues(this.db);
     }
 

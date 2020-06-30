@@ -28,7 +28,7 @@ test('creates database in memory', () => {
 
 test('creates database in file', () => {
     const storage = new ApifyStorageLocal({
-        dbDirectoryPath: TEMP_DIR,
+        storageDir: TEMP_DIR,
     });
     const dbFile = 'db.sqlite';
     expect(storage.db).toBeInstanceOf(Database);
@@ -41,7 +41,7 @@ test('creates database in file', () => {
 
 test('dropDatabase removes database files', () => {
     const storage = new ApifyStorageLocal({
-        dbDirectoryPath: TEMP_DIR,
+        storageDir: TEMP_DIR,
     });
 
     storage.dropDatabase();
