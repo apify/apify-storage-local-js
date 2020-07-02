@@ -34,7 +34,7 @@ test('creates database in file', () => {
     expect(storage.db).toBeInstanceOf(Database);
     expect(fs.readdirSync(TEMP_DIR)).toEqual([
         dbFile,
-        ...ApifyStorageLocal.DATABASE_FILE_SUFFIXES.map(sfx => `${dbFile}${sfx}`),
+        ...ApifyStorageLocal.DATABASE_FILE_SUFFIXES.map((sfx) => `${dbFile}${sfx}`),
     ]);
     storage.dropDatabase();
 });

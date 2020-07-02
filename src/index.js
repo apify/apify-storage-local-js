@@ -2,7 +2,9 @@ const Database = require('better-sqlite3');
 const fs = require('fs');
 const ow = require('ow');
 const path = require('path');
-const RequestQueues = require('./request_queues');
+const RequestQueueDatabaseClient = require('./database_clients/request_queue_db');
+const RequestQueueClient = require('./resource_clients/request_queue');
+const RequestQueueCollectionClient = require('./resource_clients/request_queue_collection');
 
 /**
  * To enable high performance WAL mode, SQLite creates 2 more
@@ -79,7 +81,8 @@ class ApifyStorageLocal {
         // https://github.com/JoshuaWise/better-sqlite3/blob/master/docs/performance.md
         this.db.exec('PRAGMA journal_mode = WAL');
         this.db.exec('PRAGMA foreign_keys = ON');
-        this.requestQueues = new RequestQueues(this.db);
+
+        this.requestQueueDbClient = new RequestQueueDatabaseClient(this.db);
     }
 
     /**
@@ -117,6 +120,20 @@ class ApifyStorageLocal {
             } catch (err) {
                 if (err.code !== 'ENOENT') throw err;
             }
+        });
+    }
+
+    requestQueues() {
+        return new RequestQueueCollectionClient({
+            dbClient: this.requestQueueDbClient,
+        });
+    }
+
+    requestQueue(id) {
+        ow(id, ow.string);
+        return new RequestQueueClient({
+            id,
+            dbClient: this.requestQueueDbClient,
         });
     }
 
