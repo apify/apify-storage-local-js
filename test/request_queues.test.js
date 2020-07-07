@@ -238,7 +238,7 @@ describe('request counts:', () => {
     });
 });
 
-describe('getQueue', () => {
+describe('get queue', () => {
     test('returns correct queue', async () => {
         let queue = await storageLocal.requestQueue('1').get();
         expect(queue.id).toBe('1');
