@@ -1,5 +1,4 @@
 const ow = require('ow');
-const ResourceClient = require('../base/resource_client');
 const { purgeNullsFromObject, uniqueKeyToRequestId } = require('../utils');
 
 const requestShape = {
@@ -33,9 +32,48 @@ const requestShape = {
 /**
  * Request queue client.
  *
- * @property {RequestQueueDatabaseClient} dbClient
+ * @property {RequestQueueEmulator} emulator
  */
-class RequestQueueClient extends ResourceClient {
+class RequestQueueClient {
+    /**
+     * @param {object} options
+     * @param {RequestQueueEmulator} options.emulator
+     * @param {string} options.id
+     */
+    constructor(options) {
+        const {
+            emulator,
+            id,
+        } = options;
+
+        this.id = id;
+        this.emulator = emulator;
+    }
+
+    async get() {
+        this.emulator.updateAccessedAtById(this.id);
+        const storage = this.emulator.selectById(this.id);
+        return purgeNullsFromObject(storage);
+    }
+
+    async update(newFields) {
+        ow(newFields, ow.object);
+        const fieldNames = Object.keys(newFields);
+        const fieldSql = fieldNames.map((name) => `${name} = :${name}`).join(', ');
+        this.emulator.runSql(`
+            UPDATE ${this.emulator.queueTableName}
+            SET ${fieldSql}
+            WHERE id = CAST(${this.id} as INTEGER)
+        `);
+        this.emulator.updateModifiedAtById(this.id);
+        const storage = this.emulator.selectById(this.id);
+        return purgeNullsFromObject(storage);
+    }
+
+    async delete() {
+        this.emulator.deleteById(this.id);
+    }
+
     /**
      * @param {object} options
      * @param {number} [options.limit=100]
@@ -49,9 +87,9 @@ class RequestQueueClient extends ResourceClient {
             limit = 100,
         } = options;
 
-        this.dbClient.updateAccessedAtById(this.id);
-        const requestJsons = this.dbClient.selectRequestJsonsByQueueIdWithLimit(this.id, limit);
-        const queueModifiedAt = this.dbClient.selectModifiedAtById(this.id);
+        this.emulator.updateAccessedAtById(this.id);
+        const requestJsons = this.emulator.selectRequestJsonsByQueueIdWithLimit(this.id, limit);
+        const queueModifiedAt = this.emulator.selectModifiedAtById(this.id);
         return {
             limit,
             queueModifiedAt,
@@ -76,7 +114,7 @@ class RequestQueueClient extends ResourceClient {
         }));
 
         const requestModel = this._createRequestModel(request, options.forefront);
-        return this.dbClient.addRequest(requestModel);
+        return this.emulator.addRequest(requestModel);
     }
 
     /**
@@ -85,8 +123,8 @@ class RequestQueueClient extends ResourceClient {
      */
     async getRequest(id) {
         ow(id, ow.string);
-        this.dbClient.updateAccessedAtById(this.id);
-        const json = this.dbClient.selectRequestJsonByIdAndQueueId(id, this.id);
+        this.emulator.updateAccessedAtById(this.id);
+        const json = this.emulator.selectRequestJsonByIdAndQueueId(id, this.id);
         return this._jsonToRequest(json);
     }
 
@@ -107,12 +145,12 @@ class RequestQueueClient extends ResourceClient {
         }));
 
         const requestModel = this._createRequestModel(request, options.forefront);
-        return this.dbClient.updateRequest(requestModel);
+        return this.emulator.updateRequest(requestModel);
     }
 
     async deleteRequest(id) {
         ow(id, ow.string);
-        this.dbClient.deleteById(id);
+        this.emulator.deleteById(id);
     }
 
     /**

@@ -11,10 +11,18 @@ exports.REQUEST_ID_LENGTH = 15;
 exports.TIMESTAMP_SQL = "STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'NOW')";
 
 /**
- * Names of all tables used in the database.
- * @type {Object}
+ * Names of all emulated storages.
+ * @type {{REQUEST_QUEUES: string, KEY_VALUE_STORES: string, REQUEST_QUEUE_REQUESTS: string, DATASETS: string}}
  */
-exports.TABLE_NAMES = {
+exports.STORAGE_NAMES = {
     REQUEST_QUEUES: 'request_queues',
-    REQUEST_QUEUE_REQUESTS: 'request_queue_requests',
+    KEY_VALUE_STORES: 'key_value_stores',
+    DATASETS: 'datasets',
 };
+
+/**
+ * To enable high performance WAL mode, SQLite creates 2 more
+ * files for performance optimizations.
+ * @type {string[]}
+ */
+exports.DATABASE_FILE_SUFFIXES = ['-shm', '-wal'];

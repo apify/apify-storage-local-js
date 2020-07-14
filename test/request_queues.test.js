@@ -1,7 +1,12 @@
+const Database = require('better-sqlite3');
+const fs = require('fs-extra');
 const ow = require('ow');
 const ApifyStorageLocal = require('../src/index');
-const { TABLE_NAMES } = require('../src/consts');
+const { STORAGE_NAMES, DATABASE_FILE_SUFFIXES } = require('../src/consts');
 const { uniqueKeyToRequestId } = require('../src/utils');
+const { prepareTestDir, removeTestDir } = require('./_tools');
+
+const REQUESTS_TABLE_NAME = `${STORAGE_NAMES.REQUEST_QUEUES}_requests`;
 
 const TEST_QUEUES = {
     1: {
@@ -21,46 +26,85 @@ let storageLocal;
 let prepare;
 let counter;
 let markRequestHandled;
+let STORAGE_DIR;
 beforeEach(() => {
+    STORAGE_DIR = prepareTestDir();
     storageLocal = new ApifyStorageLocal({
-        inMemory: true,
-        // debug: true,
+        storageDir: STORAGE_DIR,
+        requestQueueEmulatorOptions: {
+            // debug: true,
+        },
     });
-    prepare = (sql) => storageLocal.db.prepare(sql);
-    counter = createCounter(storageLocal.db);
-    markRequestHandled = storageLocal.db.transaction((qId, rId) => {
+    const { db } = storageLocal.requestQueueEmulator;
+    prepare = (sql) => db.prepare(sql);
+    counter = createCounter(db);
+    markRequestHandled = db.transaction((qId, rId) => {
         prepare(`
-                UPDATE ${TABLE_NAMES.REQUEST_QUEUE_REQUESTS}
+                UPDATE ${REQUESTS_TABLE_NAME}
                 SET orderNo = null
                 WHERE queueId = ? AND id = ?
             `).run(qId, rId);
         prepare(`
-                UPDATE ${TABLE_NAMES.REQUEST_QUEUES}
+                UPDATE ${STORAGE_NAMES.REQUEST_QUEUES}
                 SET handledRequestCount = handledRequestCount + 1
                 WHERE id = ?
             `).run(qId);
     });
-    seedDb(storageLocal.db);
+    seedDb(db);
 });
 
 afterEach(() => {
-    storageLocal.closeDatabase();
+    storageLocal.requestQueueEmulator.closeDatabase();
+});
+
+afterAll(() => {
+    removeTestDir(STORAGE_DIR);
+});
+
+test('creates database in memory', () => {
+    const storageDir = prepareTestDir();
+    const inMemoryStorage = new ApifyStorageLocal({
+        storageDir,
+        requestQueueEmulatorOptions: {
+            inMemory: true,
+        },
+    });
+    expect(inMemoryStorage.requestQueueEmulator.db).toBeInstanceOf(Database);
+    expect(fs.readdirSync(inMemoryStorage.requestQueueDir)).toHaveLength(0);
+    inMemoryStorage.requestQueueEmulator.closeDatabase();
+    removeTestDir(storageDir);
+});
+
+test('creates database in file', () => {
+    const defaultDbFile = 'request_queues.sqlite';
+    expect(storageLocal.requestQueueEmulator.db).toBeInstanceOf(Database);
+    expect(fs.readdirSync(storageLocal.requestQueueDir)).toEqual([
+        defaultDbFile,
+        ...DATABASE_FILE_SUFFIXES.map((sfx) => `${defaultDbFile}${sfx}`),
+    ]);
+    storageLocal.requestQueueEmulator.dropDatabase();
+});
+
+test('dropDatabase removes database files', () => {
+    expect(fs.readdirSync(storageLocal.requestQueueDir)).toHaveLength(3);
+    storageLocal.requestQueueEmulator.dropDatabase();
+    expect(fs.readdirSync(storageLocal.requestQueueDir)).toHaveLength(0);
 });
 
 test('queues table exists', () => {
     const { name } = prepare(`
         SELECT name FROM sqlite_master
-        WHERE type='table' AND name='${TABLE_NAMES.REQUEST_QUEUES}';
+        WHERE type='table' AND name='${STORAGE_NAMES.REQUEST_QUEUES}';
     `).get();
-    expect(name).toBe(TABLE_NAMES.REQUEST_QUEUES);
+    expect(name).toBe(STORAGE_NAMES.REQUEST_QUEUES);
 });
 
 test('requests table exists', () => {
     const { name } = prepare(`
         SELECT name FROM sqlite_master
-        WHERE type='table' AND name='${TABLE_NAMES.REQUEST_QUEUE_REQUESTS}';
+        WHERE type='table' AND name='${REQUESTS_TABLE_NAME}';
     `).get();
-    expect(name).toBe(TABLE_NAMES.REQUEST_QUEUE_REQUESTS);
+    expect(name).toBe(REQUESTS_TABLE_NAME);
 });
 
 describe('timestamps:', () => {
@@ -69,7 +113,7 @@ describe('timestamps:', () => {
     let selectTimestamps;
     beforeEach(() => {
         selectTimestamps = prepare(`
-            SELECT modifiedAt, accessedAt, createdAt FROM ${TABLE_NAMES.REQUEST_QUEUES}
+            SELECT modifiedAt, accessedAt, createdAt FROM ${STORAGE_NAMES.REQUEST_QUEUES}
             WHERE id = ?
         `);
     });
@@ -85,7 +129,7 @@ describe('timestamps:', () => {
         const beforeUpdate = selectTimestamps.get(queueId);
         const request = numToRequest(1);
         prepare(`
-            UPDATE ${TABLE_NAMES.REQUEST_QUEUE_REQUESTS}
+            UPDATE ${REQUESTS_TABLE_NAME}
             SET retryCount = 10
             WHERE queueId = ? AND id = ?
         `).run(queueId, request.id);
@@ -100,7 +144,7 @@ describe('timestamps:', () => {
         request.json = 'x';
         request.queueId = queueId;
         prepare(`
-            INSERT INTO ${TABLE_NAMES.REQUEST_QUEUE_REQUESTS}(queueId, id, url, uniqueKey, json)
+            INSERT INTO ${REQUESTS_TABLE_NAME}(queueId, id, url, uniqueKey, json)
             VALUES(:queueId, :id, :url, :uniqueKey, :json)
         `).run(request);
         const afterUpdate = selectTimestamps.get(queueId);
@@ -112,7 +156,7 @@ describe('timestamps:', () => {
         const beforeUpdate = selectTimestamps.get(queueId);
         const request = numToRequest(1);
         prepare(`
-            DELETE FROM ${TABLE_NAMES.REQUEST_QUEUE_REQUESTS}
+            DELETE FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ? AND id = ?
         `).run(queueId, request.id);
         const afterUpdate = selectTimestamps.get(queueId);
@@ -144,7 +188,7 @@ describe('request counts:', () => {
     let selectRequestCounts;
     beforeEach(() => {
         selectRequestCounts = prepare(`
-            SELECT totalRequestCount, handledRequestCount, pendingRequestCount FROM ${TABLE_NAMES.REQUEST_QUEUES}
+            SELECT totalRequestCount, handledRequestCount, pendingRequestCount FROM ${STORAGE_NAMES.REQUEST_QUEUES}
             WHERE id = ?
         `);
     });
@@ -314,7 +358,7 @@ describe('addRequest', () => {
         expect(counter.requests(queueId)).toBe(startCount + 1);
 
         const requestModel = prepare(`
-            SELECT * FROM ${TABLE_NAMES.REQUEST_QUEUE_REQUESTS}
+            SELECT * FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ? AND id = ?
         `).get(queueId, requestId);
         expect(requestModel.queueId).toBe(Number(queueId));
@@ -349,7 +393,7 @@ describe('addRequest', () => {
 
         await storageLocal.requestQueue(queueId).addRequest(newRequest);
         const requestModel = prepare(`
-            SELECT * FROM ${TABLE_NAMES.REQUEST_QUEUE_REQUESTS}
+            SELECT * FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ? AND id = ?
         `).get(queueId, requestId);
         expect(requestModel.id).toBe(requestId);
@@ -393,7 +437,7 @@ describe('addRequest', () => {
         await storageLocal.requestQueue(queueId).addRequest(request, { forefront: true });
         expect(counter.requests(queueId)).toBe(startCount + 1);
         const firstId = prepare(`
-            SELECT id FROM ${TABLE_NAMES.REQUEST_QUEUE_REQUESTS}
+            SELECT id FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ? AND orderNo IS NOT NULL
             LIMIT 1
         `).pluck().get(queueId);
@@ -490,7 +534,7 @@ describe('updateRequest', () => {
         });
 
         const requestModel = prepare(`
-            SELECT * FROM ${TABLE_NAMES.REQUEST_QUEUE_REQUESTS}
+            SELECT * FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ? AND id = ?
         `).get(queueId, request.id);
 
@@ -541,7 +585,7 @@ describe('updateRequest', () => {
         await storageLocal.requestQueue(queueId).updateRequest(request, { forefront: true });
         expect(counter.requests(queueId)).toBe(startCount);
         const requestId = prepare(`
-            SELECT id FROM ${TABLE_NAMES.REQUEST_QUEUE_REQUESTS}
+            SELECT id FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ? AND orderNo IS NOT NULL
             LIMIT 1
         `).pluck().get(queueId);
@@ -637,14 +681,14 @@ function seedDb(db) {
 
 function insertQueue(db, queue) {
     return db.prepare(`
-        INSERT INTO ${TABLE_NAMES.REQUEST_QUEUES}(name, totalRequestCount)
+        INSERT INTO ${STORAGE_NAMES.REQUEST_QUEUES}(name, totalRequestCount)
         VALUES(?, ?)
     `).run(queue.name, queue.requestCount).lastInsertRowid;
 }
 
 function insertRequests(db, queueId, models) {
     const insert = db.prepare(`
-        INSERT INTO ${TABLE_NAMES.REQUEST_QUEUE_REQUESTS}(
+        INSERT INTO ${REQUESTS_TABLE_NAME}(
             id, queueId, orderNo, url, uniqueKey, method, retryCount, json
         )
         VALUES(
@@ -684,8 +728,8 @@ function numToRequest(num) {
 }
 
 function createCounter(db) {
-    const selectQueueCount = db.prepare(`SELECT COUNT(*) FROM ${TABLE_NAMES.REQUEST_QUEUES}`).pluck();
-    const selectRequestCount = db.prepare(`SELECT COUNT(*) FROM ${TABLE_NAMES.REQUEST_QUEUE_REQUESTS} WHERE queueId = ?`).pluck();
+    const selectQueueCount = db.prepare(`SELECT COUNT(*) FROM ${STORAGE_NAMES.REQUEST_QUEUES}`).pluck();
+    const selectRequestCount = db.prepare(`SELECT COUNT(*) FROM ${REQUESTS_TABLE_NAME} WHERE queueId = ?`).pluck();
     return {
         queues() {
             return selectQueueCount.get();

@@ -32,7 +32,7 @@
         "src"
     ],
     "scripts": {
-        "test": "jest --coverage",
+        "test": "jest",
         "lint": "eslint ./src ./test",
         "lint:fix": "eslint ./src ./test --ext .js --fix"
     },
