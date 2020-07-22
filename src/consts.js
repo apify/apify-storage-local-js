@@ -26,3 +26,9 @@ exports.STORAGE_NAMES = {
  * @type {string[]}
  */
 exports.DATABASE_FILE_SUFFIXES = ['-shm', '-wal'];
+
+/**
+ * Except in dataset items, the default limit for API results is 1000.
+ * @type {number}
+ */
+exports.DEFAULT_API_PARAM_LIMIT = 1000;

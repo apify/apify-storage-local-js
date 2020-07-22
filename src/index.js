@@ -56,7 +56,6 @@ class ApifyStorageLocal {
     keyValueStores() {
         return new KeyValueStoreCollectionClient({
             emulator: this.keyValueStoreEmulator,
-            storageDir: this.storageDir,
         });
     }
 
@@ -65,14 +64,12 @@ class ApifyStorageLocal {
         return new KeyValueStoreClient({
             id,
             emulator: this.keyValueStoreEmulator,
-            storageDir: this.storageDir,
         });
     }
 
     requestQueues() {
         return new RequestQueueCollectionClient({
             emulator: this.requestQueueEmulator,
-            storageDir: this.storageDir,
         });
     }
 
@@ -81,7 +78,6 @@ class ApifyStorageLocal {
         return new RequestQueueClient({
             id,
             emulator: this.requestQueueEmulator,
-            storageDir: this.storageDir,
         });
     }
 }
