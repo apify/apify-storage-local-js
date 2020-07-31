@@ -1,23 +1,6 @@
-const Database = require('better-sqlite3');
-const fs = require('fs');
 const path = require('path');
 const QueueOperationInfo = require('./queue_operation_info');
-const { STORAGE_NAMES, TIMESTAMP_SQL, DATABASE_FILE_SUFFIXES } = require('../consts');
-
-/**
- * @typedef {object} RequestQueueEmulatorOptions
- * @property {string} [filename='request_queues.sqlite']
- *  Custom filename for your database. Useful when you want to
- *  keep multiple databases for any reason. Note that 2 other
- *  files are created by the database that enable higher performance.
- * @property {boolean} [debug=false]
- *  Whether all SQL queries made by the database should be logged
- *  to the console.
- * @property {boolean} [inMemory=false]
- *  If true, the database will only exist in memory. This is useful
- *  for testing or for cases where persistence is not necessary,
- *  such as short running tasks where it may improve performance.
- */
+const { STORAGE_NAMES, TIMESTAMP_SQL, DATABASE_FILE_NAME } = require('../consts');
 
 /** @type {string} */
 const ERROR_REQUEST_NOT_UNIQUE = 'SQLITE_CONSTRAINT_PRIMARYKEY';
@@ -25,100 +8,42 @@ const ERROR_QUEUE_DOES_NOT_EXIST = 'SQLITE_CONSTRAINT_FOREIGNKEY';
 
 class RequestQueueEmulator {
     /**
-     * @param {string} storageDir
-     * @param {RequestQueueEmulatorOptions} options
+     * @param {object} options
+     * @param {string} options.queueDir
+     * @param {DatabaseConnectionCache} options.dbConnections
      */
-    constructor(storageDir, options = {}) {
+    constructor(options) {
         const {
-            filename = `${STORAGE_NAMES.REQUEST_QUEUES}.sqlite`,
-            debug = false,
-            inMemory = false,
+            queueDir,
+            dbConnections,
         } = options;
 
-        this.dir = storageDir;
+        this.dbPath = path.join(queueDir, DATABASE_FILE_NAME);
+        this.dbConnections = dbConnections;
+        try {
+            this.db = dbConnections.openConnection(this.dbPath);
+        } catch (err) {
+            if (err.code !== 'ENOENT') throw err;
+            const newError = new Error(`Request queue with id: ${path.parse(queueDir).name} does not exist.`);
+            newError.code = 'ENOENT';
+            throw newError;
+        }
+
         this.queueTableName = STORAGE_NAMES.REQUEST_QUEUES;
         this.requestsTableName = `${STORAGE_NAMES.REQUEST_QUEUES}_requests`;
 
-        this.inMemory = inMemory;
-        this.dbFilePath = this.inMemory
-            ? ':memory:'
-            : path.join(this.dir, filename);
-        this.debug = debug;
-        this.connectDatabase();
-
+        // Everything's covered by IF NOT EXISTS so no need
+        // to worry that multiple entities will be created.
         this._createTables();
         this._createTriggers();
         this._createIndexes();
     }
 
     /**
-     * Connects to an existing database, or creates a new one.
-     * It's called automatically when {@link RequestQueueEmulator} instance
-     * is constructed. Calling manually is useful after you call
-     * {@link RequestQueueEmulator#dropDatabase} to get a clean slate.
+     * Disconnects the emulator from the underlying database.
      */
-    connectDatabase() {
-        const dbOptions = {};
-        if (this.debug) dbOptions.verbose = (statement) => console.log(statement);
-        try {
-            this.db = new Database(this.dbFilePath, dbOptions);
-        } catch (err) {
-            throw new Error(`Connection to request queue database could not be established at ${this.dbFilePath}\nCause: ${err.message}`);
-        }
-        // WAL mode should greatly improve performance
-        // https://github.com/JoshuaWise/better-sqlite3/blob/master/docs/performance.md
-        this.db.exec('PRAGMA journal_mode = WAL');
-        this.db.exec('PRAGMA foreign_keys = ON');
-    }
-
-    /**
-     * Closes database connection and keeps the data when using
-     * a file system database. In memory data are lost. Should
-     * be called at the end of use to allow the process to exit
-     * gracefully. No further database operations will be executed.
-     *
-     * Call {@link RequestQueueEmulator#connectDatabase} or create a new
-     * {@link RequestQueueEmulator} instance to get a new database connection.
-     */
-    closeDatabase() {
-        this.db.close();
-    }
-
-    /**
-     * Closes the database connection and removes all data.
-     * With file system databases, it deletes the database file.
-     * No further database operations will be executed.
-     *
-     * Call {@link RequestQueueEmulator#connectDatabase} or create a new
-     * {@link RequestQueueEmulator} instance to create a new database.
-     */
-    dropDatabase() {
-        this.db.close();
-        if (this.inMemory) return;
-        fs.unlinkSync(this.dbFilePath);
-
-        // It seems that the extra 2 files are automatically deleted
-        // when the original file is deleted, but I'm not sure if
-        // this applies to all OSs.
-        DATABASE_FILE_SUFFIXES.forEach((suffix) => {
-            try {
-                fs.unlinkSync(`${this.dbFilePath}${suffix}`);
-            } catch (err) {
-                if (err.code !== 'ENOENT') throw err;
-            }
-        });
-    }
-
-    /**
-     * @param {string} sql
-     * @return {*}
-     */
-    runSql(sql) {
-        const statement = this.db.prepare(sql);
-        if (/^\s*SELECT/.test(sql)) {
-            return statement.get();
-        }
-        return statement.run();
+    disconnect() {
+        this.dbConnections.closeConnection(this.dbPath);
     }
 
     /**
@@ -210,17 +135,33 @@ class RequestQueueEmulator {
 
     /**
      * @param {string} id
+     * @param {string} name
+     * @return {*}
+     */
+    updateNameById(id, name) {
+        if (!this._updateNameById) {
+            this._updateNameById = this.db.prepare(`
+                UPDATE ${this.queueTableName}
+                SET name = :name
+                WHERE id = CAST(:id as INTEGER)
+            `);
+        }
+        return this._updateModifiedAtById.run({ id, name });
+    }
+
+    /**
+     * @param {string} id
      * @return {*}
      */
     updateModifiedAtById(id) {
-        if (!this._updateQueueModifiedById) {
-            this._updateQueueModifiedAtById = this.db.prepare(`
+        if (!this._updateModifiedAtById) {
+            this._updateModifiedAtById = this.db.prepare(`
                 UPDATE ${this.queueTableName}
                 SET modifiedAt = ${TIMESTAMP_SQL}
                 WHERE id = CAST(? as INTEGER)
             `);
         }
-        return this._updateQueueModifiedAtById.run(id);
+        return this._updateModifiedAtById.run(id);
     }
 
     /**
@@ -228,14 +169,14 @@ class RequestQueueEmulator {
      * @return {*}
      */
     updateAccessedAtById(id) {
-        if (!this._updateQueueAccessedAtById) {
-            this._updateQueueAccessedAtById = this.db.prepare(`
+        if (!this._updateAccessedAtById) {
+            this._updateAccessedAtById = this.db.prepare(`
                 UPDATE ${this.queueTableName}
                 SET accessedAt = ${TIMESTAMP_SQL}
                 WHERE id = CAST(? as INTEGER)
             `);
         }
-        return this._updateQueueAccessedAtById.run(id);
+        return this._updateAccessedAtById.run(id);
     }
 
     /**

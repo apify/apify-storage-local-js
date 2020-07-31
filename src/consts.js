@@ -21,6 +21,12 @@ exports.STORAGE_NAMES = {
 };
 
 /**
+ * Name of the request queue master database file.
+ * @type {string}
+ */
+exports.DATABASE_FILE_NAME = 'db.sqlite';
+
+/**
  * To enable high performance WAL mode, SQLite creates 2 more
  * files for performance optimizations.
  * @type {string[]}

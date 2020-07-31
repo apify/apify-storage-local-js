@@ -22,7 +22,7 @@ let prepare;
 let counter;
 let STORAGE_DIR;
 beforeEach(() => {
-    STORAGE_DIR = prepareTestDir(`${STORAGE_NAMES.KEY_VALUE_STORES}_test_storage`);
+    STORAGE_DIR = prepareTestDir();
     storageLocal = new ApifyStorageLocal({
         storageDir: STORAGE_DIR,
     });
@@ -31,7 +31,7 @@ beforeEach(() => {
 });
 
 afterAll(() => {
-    removeTestDir('key_value_stores');
+    removeTestDir(STORAGE_NAMES.KEY_VALUE_STORES);
 });
 
 test('stores directory exists', () => {

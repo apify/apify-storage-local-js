@@ -10,14 +10,14 @@ const path = require('path');
 class KeyValueStoreCollectionClient {
     /**
      * @param {object} options
-     * @param {RequestQueueEmulator} options.emulator
+     * @param {string} options.storageDir
      */
     constructor(options) {
         const {
-            emulator,
+            storageDir,
         } = options;
 
-        this.emulator = emulator;
+        this.storageDir = storageDir;
     }
 
     async list() {
@@ -26,7 +26,7 @@ class KeyValueStoreCollectionClient {
 
     async getOrCreate(name) {
         ow(name, ow.optional.string);
-        const storePath = path.join(this.emulator.dir, name);
+        const storePath = path.join(this.storageDir, name);
         await fs.ensureDir(storePath);
         const stats = await fs.stat(storePath);
         return {

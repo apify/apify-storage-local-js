@@ -1,4 +1,7 @@
+const fs = require('fs-extra');
 const ow = require('ow');
+const path = require('path');
+const RequestQueueEmulator = require('../emulators/request_queue_emulator');
 const { purgeNullsFromObject, uniqueKeyToRequestId } = require('../utils');
 
 const requestShape = {
@@ -31,47 +34,101 @@ const requestShape = {
 
 /**
  * Request queue client.
- *
- * @property {RequestQueueEmulator} emulator
  */
 class RequestQueueClient {
     /**
      * @param {object} options
-     * @param {RequestQueueEmulator} options.emulator
-     * @param {string} options.id
+     * @param {string} options.name
+     * @param {string} options.storageDir
+     * @param {DatabaseConnectionCache} options.dbConnections
      */
     constructor(options) {
         const {
-            emulator,
-            id,
+            name,
+            storageDir,
+            dbConnections,
         } = options;
 
-        this.id = id;
-        this.emulator = emulator;
+        // Since queues are represented by folders,
+        // each DB only has one queue with ID 1.
+        this.id = 1;
+
+        this.name = name;
+        this.dbConnections = dbConnections;
+
+        this.queueDir = path.join(storageDir, name);
+    }
+
+    /**
+     * API client does not make any requests immediately after
+     * creation so we simulate this by creating the emulator
+     * lazily. The outcome is that an attempt to access a queue
+     * that does not exist throws only at the access invocation,
+     * which is in line with API client.
+     *
+     * @return {RequestQueueEmulator}
+     * @private
+     */
+    _getEmulator() {
+        if (!this.emulator) {
+            this.emulator = new RequestQueueEmulator({
+                queueDir: this.queueDir,
+                dbConnections: this.dbConnections,
+            });
+        }
+        return this.emulator;
     }
 
     async get() {
-        this.emulator.updateAccessedAtById(this.id);
-        const storage = this.emulator.selectById(this.id);
-        return purgeNullsFromObject(storage);
+        try {
+            this._getEmulator().updateAccessedAtById(this.id);
+            const queue = this._getEmulator().selectById(this.id);
+            queue.id = queue.name;
+            return purgeNullsFromObject(queue);
+        } catch (err) {
+            if (err.code !== 'ENOENT') throw err;
+        }
     }
 
     async update(newFields) {
-        ow(newFields, ow.object);
-        const fieldNames = Object.keys(newFields);
-        const fieldSql = fieldNames.map((name) => `${name} = :${name}`).join(', ');
-        this.emulator.runSql(`
-            UPDATE ${this.emulator.queueTableName}
-            SET ${fieldSql}
-            WHERE id = CAST(${this.id} as INTEGER)
-        `);
-        this.emulator.updateModifiedAtById(this.id);
-        const storage = this.emulator.selectById(this.id);
-        return purgeNullsFromObject(storage);
+        // The validation is intentionally loose to prevent issues
+        // when swapping to a remote queue in production.
+        ow(newFields, ow.object.partialShape({
+            name: ow.optional.string.minLength(1),
+        }));
+        if (!newFields.name) return;
+
+        const newPath = path.join(path.dirname(this.queueDir), newFields.name);
+
+        // To prevent chaos, we close the database connection before moving the folder.
+        if (this.emulator) {
+            this.emulator.disconnect();
+        }
+
+        try {
+            await fs.move(this.queueDir, newPath);
+        } catch (err) {
+            if (/dest already exists/.test(err.message)) {
+                throw new Error('Request queue name is not unique.');
+            }
+            throw err;
+        }
+
+        this.name = newFields.name;
+
+        this._getEmulator().updateNameById(this.id, newFields.name);
+        this._getEmulator().updateModifiedAtById(this.id);
+        const queue = this._getEmulator().selectById(this.id);
+        queue.id = queue.name;
+        return purgeNullsFromObject(queue);
     }
 
     async delete() {
-        this.emulator.deleteById(this.id);
+        if (this.emulator) {
+            this.emulator.disconnect();
+        }
+
+        await fs.remove(this.queueDir);
     }
 
     /**
@@ -87,9 +144,9 @@ class RequestQueueClient {
             limit = 100,
         } = options;
 
-        this.emulator.updateAccessedAtById(this.id);
-        const requestJsons = this.emulator.selectRequestJsonsByQueueIdWithLimit(this.id, limit);
-        const queueModifiedAt = this.emulator.selectModifiedAtById(this.id);
+        this._getEmulator().updateAccessedAtById(this.id);
+        const requestJsons = this._getEmulator().selectRequestJsonsByQueueIdWithLimit(this.id, limit);
+        const queueModifiedAt = this._getEmulator().selectModifiedAtById(this.id);
         return {
             limit,
             queueModifiedAt,
@@ -114,7 +171,7 @@ class RequestQueueClient {
         }));
 
         const requestModel = this._createRequestModel(request, options.forefront);
-        return this.emulator.addRequest(requestModel);
+        return this._getEmulator().addRequest(requestModel);
     }
 
     /**
@@ -123,8 +180,8 @@ class RequestQueueClient {
      */
     async getRequest(id) {
         ow(id, ow.string);
-        this.emulator.updateAccessedAtById(this.id);
-        const json = this.emulator.selectRequestJsonByIdAndQueueId(id, this.id);
+        this._getEmulator().updateAccessedAtById(this.id);
+        const json = this._getEmulator().selectRequestJsonByIdAndQueueId(id, this.id);
         return this._jsonToRequest(json);
     }
 
@@ -145,12 +202,12 @@ class RequestQueueClient {
         }));
 
         const requestModel = this._createRequestModel(request, options.forefront);
-        return this.emulator.updateRequest(requestModel);
+        return this._getEmulator().updateRequest(requestModel);
     }
 
     async deleteRequest(id) {
         ow(id, ow.string);
-        this.emulator.deleteById(id);
+        this._getEmulator().deleteById(id);
     }
 
     /**

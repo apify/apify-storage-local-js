@@ -11,32 +11,29 @@ const COMMON_LOCAL_FILE_EXTENSIONS = ['json', 'jpeg', 'png', 'html', 'jpg', 'bin
 
 /**
  * Key-value Store client.
- *
- * @property {KeyValueStoreEmulator} emulator
  */
 class KeyValueStoreClient {
     /**
      * @param {object} options
-     * @param {RequestQueueEmulator} options.emulator
      * @param {string} options.id
+     * @param {string} options.storageDir
      */
     constructor(options) {
         const {
-            emulator,
-            id,
+            name,
+            storageDir,
         } = options;
 
-        this.id = id;
-        this.emulator = emulator;
-        this.storagePath = path.join(this.emulator.dir, this.id);
+        this.name = name;
+        this.storeDir = path.join(storageDir, name);
     }
 
     async get() {
         try {
-            const stats = await fs.stat(this.storagePath);
+            const stats = await fs.stat(this.storeDir);
             return {
-                id: this.id,
-                name: this.id,
+                id: this.name,
+                name: this.name,
                 createdAt: stats.birthtime,
                 modifiedAt: stats.mtime,
                 accessedAt: stats.atime,
@@ -54,19 +51,20 @@ class KeyValueStoreClient {
         }));
         if (!newFields.name) return;
 
-        const newPath = path.join(this.emulator.dir, newFields.name);
+        const newPath = path.join(path.dirname(this.storeDir), newFields.name);
         try {
-            await fs.move(this.storagePath, newPath);
+            await fs.move(this.storeDir, newPath);
         } catch (err) {
             if (/dest already exists/.test(err.message)) {
                 throw new Error('Key-value store name is not unique.');
             }
             throw err;
         }
+        this.name = newFields.name;
     }
 
     async delete() {
-        await fs.remove(this.storagePath);
+        await fs.remove(this.storeDir);
     }
 
     async listKeys(options = {}) {
@@ -82,7 +80,7 @@ class KeyValueStoreClient {
             desc,
         } = options;
 
-        const files = await fs.readdir(this.storagePath);
+        const files = await fs.readdir(this.storeDir);
 
         if (desc) files.reverse();
 
@@ -145,7 +143,7 @@ class KeyValueStoreClient {
             const result = await this._handleFile(key, fs.readFile);
             return result && maybeParseBody(result.returnValue, mime.contentType(result.fileName));
         } catch (err) {
-            throw new Error(`Error reading file '${key}' in directory '${this.storagePath}'.\nCause: ${err.message}`);
+            throw new Error(`Error reading file '${key}' in directory '${this.storeDir}'.\nCause: ${err.message}`);
         }
     }
 
@@ -163,7 +161,7 @@ class KeyValueStoreClient {
         try {
             await fs.writeFile(filePath, value);
         } catch (err) {
-            throw new Error(`Error writing file '${key}' in directory '${this.storagePath}'.\nCause: ${err.message}`);
+            throw new Error(`Error writing file '${key}' in directory '${this.storeDir}'.\nCause: ${err.message}`);
         }
     }
 
@@ -179,7 +177,7 @@ class KeyValueStoreClient {
      * @private
      */
     _resolvePath(fileName) {
-        return path.resolve(this.storagePath, fileName);
+        return path.resolve(this.storeDir, fileName);
     }
 
     /**
@@ -227,7 +225,7 @@ class KeyValueStoreClient {
      * @ignore
      */
     async _findFileNameByKey(key) {
-        const files = await fs.readdir(this.storagePath);
+        const files = await fs.readdir(this.storeDir);
         return files.find((file) => key === path.parse(file).name);
     }
 }
