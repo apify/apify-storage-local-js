@@ -1,13 +1,17 @@
-const contentTypeParser = require('content-type');
 const fs = require('fs-extra');
 const mime = require('mime-types');
 const ow = require('ow');
 const path = require('path');
+const stream = require('stream');
+const util = require('util');
 const { maybeParseBody } = require('../body_parser');
 const { DEFAULT_API_PARAM_LIMIT } = require('../consts');
 
 const DEFAULT_LOCAL_FILE_EXTENSION = 'bin';
 const COMMON_LOCAL_FILE_EXTENSIONS = ['json', 'jpeg', 'png', 'html', 'jpg', 'bin', 'txt', 'xml', 'pdf', 'mp3', 'js', 'css', 'csv'];
+const DEFAULT_CONTENT_TYPE = 'application/json; charset=utf-8';
+
+const streamFinished = util.promisify(stream.finished);
 
 /**
  * Key-value Store client.
@@ -31,12 +35,15 @@ class KeyValueStoreClient {
     async get() {
         try {
             const stats = await fs.stat(this.storeDir);
+            // The platform treats writes as access, but filesystem does not,
+            // so if the modification time is more recent, use that.
+            const accessedTimestamp = Math.max(stats.mtime.getTime(), stats.atime.getTime());
             return {
                 id: this.name,
                 name: this.name,
                 createdAt: stats.birthtime,
                 modifiedAt: stats.mtime,
-                accessedAt: stats.atime,
+                accessedAt: new Date(accessedTimestamp),
             };
         } catch (err) {
             if (err.code !== 'ENOENT') throw err;
@@ -125,7 +132,7 @@ class KeyValueStoreClient {
             exclusiveStartKey,
             isTruncated: !nextExclusiveStartKey,
             nextExclusiveStartKey,
-            items,
+            items: limitedItems,
         };
     }
 
@@ -149,19 +156,38 @@ class KeyValueStoreClient {
 
     async setValue(key, value, options = {}) {
         ow(key, ow.string);
-        // value can be anything
+        ow.any(ow.string, ow.object.plain, ow.number, ow.buffer, ow.object.instanceOf(stream.Readable));
         ow(options, ow.object.exactShape({
             contentType: ow.optional.string,
         }));
 
-        const contentType = contentTypeParser.parse(options.contentType).type;
+        const {
+            contentType = DEFAULT_CONTENT_TYPE,
+        } = options;
+
         const extension = mime.extension(contentType) || DEFAULT_LOCAL_FILE_EXTENSION;
         const filePath = this._resolvePath(`${key}.${extension}`);
 
+        const isValuePlainObject = ow.isValid(value, ow.object.plain);
+        const isContentTypeJson = extension === 'json';
+
+        if (isValuePlainObject && isContentTypeJson) {
+            value = JSON.stringify(value, null, 2);
+        }
+
         try {
-            await fs.writeFile(filePath, value);
+            if (value instanceof stream.Readable) {
+                const writeStream = fs.createWriteStream(filePath, value);
+                await streamFinished(writeStream);
+            } else {
+                await fs.writeFile(filePath, value);
+            }
         } catch (err) {
-            throw new Error(`Error writing file '${key}' in directory '${this.storeDir}'.\nCause: ${err.message}`);
+            if (err.code === 'ENOENT') {
+                throw new Error(`Key-value store with id: ${this.name} does not exist.`);
+            } else {
+                throw new Error(`Error writing file '${key}' in directory '${this.storeDir}'.\nCause: ${err.message}`);
+            }
         }
     }
 

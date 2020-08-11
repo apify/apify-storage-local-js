@@ -2,7 +2,6 @@
 // ONCE THE V1 IS RELEASED, IT SHOULD BE REQUIRED FROM THERE
 
 const contentTypeParser = require('content-type');
-const { isNode } = require('./utils');
 
 const CONTENT_TYPE_JSON = 'application/json';
 const STRINGIFIABLE_CONTENT_TYPE_RXS = [
@@ -68,10 +67,7 @@ function isomorphicBufferToString(buffer, encoding) {
  */
 function isCharsetStringifiable(charset) {
     if (!charset) return true; // hope that it's utf-8
-    if (isNode()) return Buffer.isEncoding(charset);
-    const normalizedCharset = charset.toLowerCase().replace('-', '');
-    // Browsers only support decoding utf-8 buffers.
-    return normalizedCharset === 'utf8';
+    return Buffer.isEncoding(charset);
 }
 
 /**
