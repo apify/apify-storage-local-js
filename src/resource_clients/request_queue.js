@@ -94,7 +94,7 @@ class RequestQueueClient {
         // The validation is intentionally loose to prevent issues
         // when swapping to a remote queue in production.
         ow(newFields, ow.object.partialShape({
-            name: ow.optional.string.minLength(1),
+            name: ow.optional.string.nonEmpty,
         }));
         if (!newFields.name) return;
 

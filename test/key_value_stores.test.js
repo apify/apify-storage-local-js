@@ -119,21 +119,21 @@ describe('get store', () => {
         expect(queue.name).toBe('second');
     });
 
-    test('returns undefined for non-existent queues', async () => {
+    test('returns undefined for non-existent stores', async () => {
         const queue = await storageLocal.keyValueStore('3').get();
         expect(queue).toBeUndefined();
     });
 });
 
 describe('getOrCreate', () => {
-    test('returns existing queue by name', async () => {
+    test('returns existing store by name', async () => {
         const queue = await storageLocal.keyValueStores().getOrCreate('first');
         expect(queue.id).toBe('first');
         const count = counter.stores();
         expect(count).toBe(2);
     });
 
-    test('creates a new queue with name', async () => {
+    test('creates a new store with name', async () => {
         const queueName = 'third';
         const queue = await storageLocal.keyValueStores().getOrCreate(queueName);
         expect(queue.id).toBe('third');
@@ -148,6 +148,11 @@ describe('delete store', () => {
         await storageLocal.keyValueStore('first').delete();
         const count = counter.stores();
         expect(count).toBe(1);
+    });
+
+    test('returns undefined for non-existent store', async () => {
+        const result = await storageLocal.keyValueStore('non-existent').delete();
+        expect(result).toBeUndefined();
     });
 });
 
@@ -254,10 +259,24 @@ describe('getRecord', () => {
         record.value = Buffer.concat(chunks).toString();
         expect(record).toEqual(expectedRecord);
     });
+
+    describe('throws', () => {
+        test('when store does not exist', async () => {
+            const id = 'non-existent';
+            try {
+                await storageLocal.keyValueStore(id).getRecord('some-key');
+                throw new Error('wrong-error');
+            } catch (err) {
+                expect(err.message).toBe(`Key-value store with id: ${id} does not exist.`);
+            }
+        });
+    });
 });
 
 describe('deleteRecord', () => {
     const storeName = 'first';
+    const startCount = TEST_STORES[1].recordCount;
+
     test('deletes record', async () => {
         const record = numToRecord(3);
         const recordPath = path.join(storeNameToDir(storeName), record.filename);
@@ -269,6 +288,24 @@ describe('deleteRecord', () => {
         } catch (err) {
             expect(err.code).toBe('ENOENT');
         }
+    });
+
+    test('returns undefined for non-existent records', async () => {
+        const savedRecord = numToRecord(startCount + 1);
+        const record = await storageLocal.keyValueStore('first').deleteRecord(savedRecord.key);
+        expect(record).toBeUndefined();
+    });
+
+    describe('throws', () => {
+        test('when store does not exist', async () => {
+            const id = 'non-existent';
+            try {
+                await storageLocal.keyValueStore(id).deleteRecord('some-key');
+                throw new Error('wrong-error');
+            } catch (err) {
+                expect(err.message).toBe(`Key-value store with id: ${id} does not exist.`);
+            }
+        });
     });
 });
 
@@ -320,6 +357,18 @@ describe('listKeys', () => {
 
         const { items } = await storageLocal.keyValueStore(store.name).listKeys({ exclusiveStartKey });
         expect(items).toEqual(exclusiveItems);
+    });
+
+    describe('throws', () => {
+        test('when store does not exist', async () => {
+            const id = 'non-existent';
+            try {
+                await storageLocal.keyValueStore(id).listKeys();
+                throw new Error('wrong-error');
+            } catch (err) {
+                expect(err.message).toBe(`Key-value store with id: ${id} does not exist.`);
+            }
+        });
     });
 });
 

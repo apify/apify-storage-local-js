@@ -72,8 +72,11 @@ class KeyValueStoreClient {
         } catch (err) {
             if (/dest already exists/.test(err.message)) {
                 throw new Error('Key-value store name is not unique.');
+            } else if (err.code === 'ENOENT') {
+                this._throw404();
+            } else {
+                throw err;
             }
-            throw err;
         }
         this.name = newFields.name;
     }
@@ -95,7 +98,16 @@ class KeyValueStoreClient {
             desc,
         } = options;
 
-        const files = await fs.readdir(this.storeDir);
+        let files;
+        try {
+            files = await fs.readdir(this.storeDir);
+        } catch (err) {
+            if (err.code === 'ENOENT') {
+                this._throw404();
+            } else {
+                throw new Error(`Error listing files in directory '${this.storeDir}'.\nCause: ${err.message}`);
+            }
+        }
 
         if (desc) files.reverse();
 
@@ -168,7 +180,11 @@ class KeyValueStoreClient {
             result = await this._handleFile(key, handler);
             if (!result) return;
         } catch (err) {
-            throw new Error(`Error reading file '${key}' in directory '${this.storeDir}'.\nCause: ${err.message}`);
+            if (err.code === 'ENOENT') {
+                throw err;
+            } else {
+                throw new Error(`Error reading file '${key}' in directory '${this.storeDir}'.\nCause: ${err.message}`);
+            }
         }
 
         const record = {
@@ -227,7 +243,7 @@ class KeyValueStoreClient {
             }
         } catch (err) {
             if (err.code === 'ENOENT') {
-                throw new Error(`Key-value store with id: ${this.name} does not exist.`);
+                this._throw404();
             } else {
                 throw new Error(`Error writing file '${key}' in directory '${this.storeDir}'.\nCause: ${err.message}`);
             }
@@ -240,7 +256,15 @@ class KeyValueStoreClient {
      */
     async deleteRecord(key) {
         ow(key, ow.string);
-        await this._handleFile(key, fs.unlink);
+        try {
+            await this._handleFile(key, fs.unlink);
+        } catch (err) {
+            if (err.code === 'ENOENT') {
+                throw err;
+            } else {
+                throw new Error(`Error deleting file '${key}' in directory '${this.storeDir}'.\nCause: ${err.message}`);
+            }
+        }
     }
 
     /**
@@ -299,8 +323,19 @@ class KeyValueStoreClient {
      * @ignore
      */
     async _findFileNameByKey(key) {
-        const files = await fs.readdir(this.storeDir);
-        return files.find((file) => key === path.parse(file).name);
+        try {
+            const files = await fs.readdir(this.storeDir);
+            return files.find((file) => key === path.parse(file).name);
+        } catch (err) {
+            if (err.code === 'ENOENT') this._throw404();
+            throw err;
+        }
+    }
+
+    _throw404() {
+        const err = new Error(`Key-value store with id: ${this.name} does not exist.`);
+        err.code = 'ENOENT';
+        throw err;
     }
 }
 
