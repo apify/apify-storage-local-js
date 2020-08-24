@@ -9,9 +9,17 @@ const { DEFAULT_API_PARAM_LIMIT } = require('../consts');
 
 const DEFAULT_LOCAL_FILE_EXTENSION = 'bin';
 const COMMON_LOCAL_FILE_EXTENSIONS = ['json', 'jpeg', 'png', 'html', 'jpg', 'bin', 'txt', 'xml', 'pdf', 'mp3', 'js', 'css', 'csv'];
-const DEFAULT_CONTENT_TYPE = 'application/json; charset=utf-8';
+const CONTENT_TYPE_JSON = 'application/json; charset=utf-8';
+const DEFAULT_CONTENT_TYPE = 'application/octet-stream';
 
 const streamFinished = util.promisify(stream.finished);
+
+/**
+ * @typedef {object} KeyValueStoreRecord
+ * @property {string} key
+ * @property {*} value
+ * @property {string} [contentType]
+ */
 
 /**
  * Key-value Store client.
@@ -136,7 +144,14 @@ class KeyValueStoreClient {
         };
     }
 
-    async getValue(key, options = {}) {
+    /**
+     * @param {string} key
+     * @param {object} [options]
+     * @param {boolean} [options.buffer]
+     * @param {boolean} [options.stream]
+     * @return KeyValueStoreRecord
+     */
+    async getRecord(key, options = {}) {
         ow(key, ow.string);
         ow(options, ow.object.exactShape({
             buffer: ow.optional.boolean,
@@ -146,29 +161,57 @@ class KeyValueStoreClient {
             disableRedirect: ow.optional.boolean,
         }));
 
+        const handler = options.stream ? fs.createReadStream : fs.readFile;
+
+        let result;
         try {
-            const result = await this._handleFile(key, fs.readFile);
-            return result && maybeParseBody(result.returnValue, mime.contentType(result.fileName));
+            result = await this._handleFile(key, handler);
+            if (!result) return;
         } catch (err) {
             throw new Error(`Error reading file '${key}' in directory '${this.storeDir}'.\nCause: ${err.message}`);
         }
+
+        const record = {
+            key,
+            value: result.returnValue,
+            contentType: mime.contentType(result.fileName),
+        };
+
+        const shouldParseBody = !(options.buffer || options.stream);
+        if (shouldParseBody) {
+            record.value = maybeParseBody(record.value, record.contentType);
+        }
+
+        return record;
     }
 
-    async setValue(key, value, options = {}) {
-        ow(key, ow.string);
-        ow.any(ow.string, ow.object.plain, ow.number, ow.buffer, ow.object.instanceOf(stream.Readable));
-        ow(options, ow.object.exactShape({
-            contentType: ow.optional.string,
+    /**
+     * @param {KeyValueStoreRecord} record
+     * @return {Promise<void>}
+     */
+    async setRecord(record) {
+        ow(record, ow.object.exactShape({
+            key: ow.string,
+            value: ow.any(ow.string, ow.object.plain, ow.number, ow.buffer, ow.object.instanceOf(stream.Readable)),
+            contentType: ow.optional.string.nonEmpty,
         }));
 
-        const {
-            contentType = DEFAULT_CONTENT_TYPE,
-        } = options;
+        const { key } = record;
+        let { value, contentType } = record;
+
+        // To allow saving Objects to JSON without providing content type
+        const isValuePlainObject = ow.isValid(value, ow.object.plain);
+        if (!contentType) {
+            contentType = isValuePlainObject
+                ? CONTENT_TYPE_JSON
+                : DEFAULT_CONTENT_TYPE;
+        }
 
         const extension = mime.extension(contentType) || DEFAULT_LOCAL_FILE_EXTENSION;
         const filePath = this._resolvePath(`${key}.${extension}`);
 
-        const isValuePlainObject = ow.isValid(value, ow.object.plain);
+        // Could be different charset or separators could
+        // be different from CONTENT_TYPE_JSON constant
         const isContentTypeJson = extension === 'json';
 
         if (isValuePlainObject && isContentTypeJson) {
@@ -191,7 +234,11 @@ class KeyValueStoreClient {
         }
     }
 
-    async deleteValue(key) {
+    /**
+     * @param {string} key
+     * @return {Promise<void>}
+     */
+    async deleteRecord(key) {
         ow(key, ow.string);
         await this._handleFile(key, fs.unlink);
     }
@@ -216,7 +263,7 @@ class KeyValueStoreClient {
      *
      * @param {string} key
      * @param {Function} handler
-     * @returns {Promise<?Object>} undefined or object in the following format:
+     * @returns {Promise<?{ returnValue: *, fileName: string }>} undefined or object in the following format:
      * {
      *     returnValue: return value of the handler function,
      *     fileName: name of the file including found extension
@@ -226,7 +273,8 @@ class KeyValueStoreClient {
     async _handleFile(key, handler) {
         for (const extension of COMMON_LOCAL_FILE_EXTENSIONS) {
             const fileName = `${key}.${extension}`;
-            await this._invokeHandler(fileName, handler);
+            const result = await this._invokeHandler(fileName, handler);
+            if (result) return result;
         }
 
         const fileName = await this._findFileNameByKey(key);
