@@ -205,9 +205,9 @@ class RequestQueueClient {
         return this._getEmulator().updateRequest(requestModel);
     }
 
-    async deleteRequest(id) {
-        ow(id, ow.string);
-        this._getEmulator().deleteById(id);
+    async deleteRequest() {
+        // TODO Deletion is done, but we also need to update request counts in a transaction.
+        throw new Error('This method is not implemented in @apify/storage-local yet.');
     }
 
     /**

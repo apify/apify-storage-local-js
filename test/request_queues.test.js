@@ -282,6 +282,18 @@ describe('request counts:', () => {
         expect(counts.handledRequestCount).toBe(0);
         expect(counts.pendingRequestCount).toBe(startCount);
     });
+
+    test.skip('deleting a request decrements totalRequestCount', async () => {
+
+    });
+
+    test.skip('deleting a handled request decrements handledRequestCount', async () => {
+
+    });
+
+    test.skip('deleting an pending request does not decrement handledRequestCount', async () => {
+
+    });
 });
 
 describe('get queue', () => {
@@ -504,6 +516,23 @@ describe('getRequest', () => {
         const request = await storageLocal.requestQueue('first').getRequest(expectedReq.id);
         expect(request).toBeUndefined();
     });
+
+    describe('throws', () => {
+        let request;
+        beforeEach(() => {
+            request = numToRequest(1);
+        });
+
+        test('when queue does not exist', async () => {
+            const queueName = 'this-queue-does-not-exist'; // eslint-disable-line no-shadow
+            try {
+                await storageLocal.requestQueue(queueName).getRequest(request.id);
+                throw new Error('wrong-error');
+            } catch (err) {
+                expect(err.message).toBe(`Request queue with id: ${queueName} does not exist.`);
+            }
+        });
+    });
 });
 
 describe('updateRequest', () => {
@@ -630,6 +659,45 @@ describe('updateRequest', () => {
     });
 });
 
+describe.skip('deleteRequest', () => {
+    const queueName = 'first';
+    const startCount = TEST_QUEUES[1].requestCount;
+    let db;
+    let request;
+    beforeEach(() => {
+        db = queueNameToDb(queueName);
+        request = numToRequest(5);
+    });
+
+    test('deletes request', async () => {
+        await storageLocal.requestQueue(queueName).deleteRequest(request.id);
+        const requestModel = db.prepare(`
+            SELECT * FROM ${REQUESTS_TABLE_NAME}
+            WHERE queueId = ${QUEUE_ID} AND id = ?
+        `).get(request.id);
+        expect(requestModel).toBeUndefined();
+        expect(counter.requests(queueName)).toBe(startCount - 1);
+    });
+
+    test('returns undefined for non-existent request', async () => {
+        const newRequest = numToRequest(startCount + 1);
+        const result = await storageLocal.requestQueue(queueName).deleteRequest(newRequest.id);
+        expect(result).toBeUndefined();
+    });
+
+    describe('throws', () => {
+        test('when queue does not exist', async () => {
+            const queueName = 'this-queue-does-not-exist'; // eslint-disable-line no-shadow
+            try {
+                await storageLocal.requestQueue(queueName).deleteRequest(request.id);
+                throw new Error('wrong-error');
+            } catch (err) {
+                expect(err.message).toBe(`Request queue with id: ${queueName} does not exist.`);
+            }
+        });
+    });
+});
+
 describe('listHead', () => {
     const queueName = 'second';
     const startCount = TEST_QUEUES[2].requestCount;
@@ -670,6 +738,18 @@ describe('listHead', () => {
 
         const { items } = await storageLocal.requestQueue(queueName).listHead();
         expect(items).toEqual(expectedItems);
+    });
+
+    describe('throws', () => {
+        test('when queue does not exist', async () => {
+            const queueName = 'this-queue-does-not-exist'; // eslint-disable-line no-shadow
+            try {
+                await storageLocal.requestQueue(queueName).listHead();
+                throw new Error('wrong-error');
+            } catch (err) {
+                expect(err.message).toBe(`Request queue with id: ${queueName} does not exist.`);
+            }
+        });
     });
 });
 

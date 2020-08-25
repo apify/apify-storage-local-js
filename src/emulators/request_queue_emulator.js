@@ -283,6 +283,16 @@ class RequestQueueEmulator {
         return this._updateRequestByModel.run(requestModel);
     }
 
+    deleteRequestById(id) {
+        if (!this._deleteRequestById) {
+            this._deleteRequestById = this.db.prepare(`
+                DELETE FROM ${this.requestsTableName}
+                WHERE id = ?
+            `);
+        }
+        return this._deleteRequestById.run(id);
+    }
+
     /**
      * @param {RequestModel} requestModel
      * @return {*}
@@ -348,6 +358,15 @@ class RequestQueueEmulator {
             });
         }
         return this._updateRequestTransaction(requestModel);
+    }
+
+    deleteRequest(id) {
+        if (!this._deleteRequestTransaction) {
+            this._deleteRequestTransaction = this.db.transaction(() => {
+                // TODO
+            });
+        }
+        return this._deleteRequestTransaction(id);
     }
 
     _createTables() {
