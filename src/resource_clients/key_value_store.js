@@ -320,7 +320,7 @@ class KeyValueStoreClient {
      *
      * @param {string} key
      * @returns {Promise<?string>}
-     * @ignore
+     * @private
      */
     async _findFileNameByKey(key) {
         try {

@@ -2,7 +2,19 @@ const fs = require('fs-extra');
 const ow = require('ow');
 const path = require('path');
 
-const LIST_ITEMS_LIMIT = 250000;
+/**
+ * This is what API returns in the x-apify-pagination-limit
+ * header when no limit query parameter is used.
+ * @type {number}
+ */
+const LIST_ITEMS_LIMIT = 999999999999;
+
+/**
+ * Number of characters of the dataset item file names.
+ * E.g.: 000000019.json - 9 digits
+ * @type {number}
+ */
+const LOCAL_FILENAME_DIGITS = 9;
 
 class DatasetClient {
     /**
@@ -18,6 +30,7 @@ class DatasetClient {
 
         this.name = name;
         this.storeDir = path.join(storageDir, name);
+        this.itemCount = undefined;
     }
 
     async export() {
@@ -25,6 +38,7 @@ class DatasetClient {
     }
 
     async listItems(options = {}) {
+        this._ensureItemCount();
         // The extra code is to enable a custom validation message.
         ow(options, ow.object.validate((value) => ({
             validator: ow.isValid(value, ow.object.exactShape({
@@ -44,57 +58,98 @@ class DatasetClient {
         const {
             limit = LIST_ITEMS_LIMIT,
             offset = 0,
+            desc,
         } = options;
 
-        const indexes = this._getItemIndexes(offset, limit);
+        const [start, end] = this._getStartAndEndIndexes(offset, limit);
         const items = [];
-        for (const idx of indexes) {
+        for (let idx = start; idx < end; idx++) {
             const item = await this._readAndParseFile(idx);
             items.push(item);
         }
 
         return {
-            items: opts.desc ? items.reverse() : items,
-            total: this.counter,
-            offset: opts.offset,
+            items: desc ? items.reverse() : items,
+            total: this.itemCount,
+            offset,
             count: items.length,
-            limit: opts.limit,
+            limit,
         };
     }
 
+    /**
+     * @param {Object|string|Object[]|string[]}items
+     * @return {Promise<void>}
+     */
     async pushItems(items) {
-        ow(items, ow.any(ow.object, ow.array, ow.string));
+        this._ensureItemCount();
+        ow(items, ow.any(
+            ow.object,
+            ow.string,
+            ow.array.ofType(ow.any(ow.object, ow.string)),
+        ));
 
-        await this.httpClient.call({
-            url: this._url('items'),
-            method: 'POST',
-            data: items,
-            params: this._params(),
+        if (!Array.isArray(items)) items = [items];
+        const promises = items.map((item) => {
+            this.counter++;
+
+            if (typeof item !== 'string') item = JSON.stringify(item, null, 2);
+            const filePath = path.join(this.storeDir, this._getItemFileName(this.counter));
+
+            return fs.writeFile(filePath, item);
         });
+        await Promise.all(promises);
+    }
+
+    _ensureItemCount() {
+        if (typeof this.itemCount === 'number') return;
+
+        let files;
+        try {
+            files = fs.readdirSync(this.storeDir);
+        } catch (err) {
+            if (err.code === 'ENOENT') {
+                throw new Error(`Dataset with id: ${this.name} does not exist.`);
+            } else {
+                throw err;
+            }
+        }
+
+        if (files.length) {
+            const lastFile = files.pop();
+            const lastFileName = path.parse(lastFile).name;
+            this.itemCount = Number(lastFileName);
+        } else {
+            this.itemCount = 0;
+        }
+    }
+
+    _getItemFileName(index) {
+        return `${index}.json`.padStart(LOCAL_FILENAME_DIGITS, '0');
     }
 
     /**
-     * Returns an array of item indexes for given offset and limit.
+     * @param {number} offset
+     * @param {number} limit
+     * @return {[number, number]}
+     * @private
      */
-    _getItemIndexes(offset = 0, limit = this.counter) {
-        if (limit === null) throw new Error('DatasetLocal must be initialized before calling this._getItemIndexes()!');
+    _getStartAndEndIndexes(offset, limit = this.itemCount) {
         const start = offset + 1;
-        const end = Math.min(offset + limit, this.counter) + 1;
-        if (start > end) return [];
-        return _.range(start, end);
+        const end = Math.min(offset + limit, this.itemCount) + 1;
+        return [start, end];
     }
 
     /**
-     * Reads and parses file for given index.
+     * @param {number} index
+     * @return {Promise<Object>}
+     * @private
      */
-    _readAndParseFile(index) {
-        const filePath = path.join(this.localStoragePath, getLocaleFilename(index));
+    async _readAndParseFile(index) {
+        const filePath = path.join(this.storeDir, this._getItemFileName(index));
 
-        return readFilePromised(filePath)
-            .then((json) => {
-                this._updateMetadata();
-                return JSON.parse(json);
-            });
+        const json = await fs.readFile(filePath, 'utf8');
+        return JSON.parse(json);
     }
 }
 
