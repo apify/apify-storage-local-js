@@ -1,5 +1,7 @@
+const fs = require('fs-extra');
 const ow = require('ow');
-const ResourceClient = require('../base/resource_client');
+const path = require('path');
+const RequestQueueEmulator = require('../emulators/request_queue_emulator');
 const { purgeNullsFromObject, uniqueKeyToRequestId } = require('../utils');
 
 const requestShape = {
@@ -32,10 +34,103 @@ const requestShape = {
 
 /**
  * Request queue client.
- *
- * @property {RequestQueueDatabaseClient} dbClient
  */
-class RequestQueueClient extends ResourceClient {
+class RequestQueueClient {
+    /**
+     * @param {object} options
+     * @param {string} options.name
+     * @param {string} options.storageDir
+     * @param {DatabaseConnectionCache} options.dbConnections
+     */
+    constructor(options) {
+        const {
+            name,
+            storageDir,
+            dbConnections,
+        } = options;
+
+        // Since queues are represented by folders,
+        // each DB only has one queue with ID 1.
+        this.id = 1;
+
+        this.name = name;
+        this.dbConnections = dbConnections;
+
+        this.queueDir = path.join(storageDir, name);
+    }
+
+    /**
+     * API client does not make any requests immediately after
+     * creation so we simulate this by creating the emulator
+     * lazily. The outcome is that an attempt to access a queue
+     * that does not exist throws only at the access invocation,
+     * which is in line with API client.
+     *
+     * @return {RequestQueueEmulator}
+     * @private
+     */
+    _getEmulator() {
+        if (!this.emulator) {
+            this.emulator = new RequestQueueEmulator({
+                queueDir: this.queueDir,
+                dbConnections: this.dbConnections,
+            });
+        }
+        return this.emulator;
+    }
+
+    async get() {
+        try {
+            this._getEmulator().updateAccessedAtById(this.id);
+            const queue = this._getEmulator().selectById(this.id);
+            queue.id = queue.name;
+            return purgeNullsFromObject(queue);
+        } catch (err) {
+            if (err.code !== 'ENOENT') throw err;
+        }
+    }
+
+    async update(newFields) {
+        // The validation is intentionally loose to prevent issues
+        // when swapping to a remote queue in production.
+        ow(newFields, ow.object.partialShape({
+            name: ow.optional.string.nonEmpty,
+        }));
+        if (!newFields.name) return;
+
+        const newPath = path.join(path.dirname(this.queueDir), newFields.name);
+
+        // To prevent chaos, we close the database connection before moving the folder.
+        if (this.emulator) {
+            this.emulator.disconnect();
+        }
+
+        try {
+            await fs.move(this.queueDir, newPath);
+        } catch (err) {
+            if (/dest already exists/.test(err.message)) {
+                throw new Error('Request queue name is not unique.');
+            }
+            throw err;
+        }
+
+        this.name = newFields.name;
+
+        this._getEmulator().updateNameById(this.id, newFields.name);
+        this._getEmulator().updateModifiedAtById(this.id);
+        const queue = this._getEmulator().selectById(this.id);
+        queue.id = queue.name;
+        return purgeNullsFromObject(queue);
+    }
+
+    async delete() {
+        if (this.emulator) {
+            this.emulator.disconnect();
+        }
+
+        await fs.remove(this.queueDir);
+    }
+
     /**
      * @param {object} options
      * @param {number} [options.limit=100]
@@ -49,9 +144,9 @@ class RequestQueueClient extends ResourceClient {
             limit = 100,
         } = options;
 
-        this.dbClient.updateAccessedAtById(this.id);
-        const requestJsons = this.dbClient.selectRequestJsonsByQueueIdWithLimit(this.id, limit);
-        const queueModifiedAt = this.dbClient.selectModifiedAtById(this.id);
+        this._getEmulator().updateAccessedAtById(this.id);
+        const requestJsons = this._getEmulator().selectRequestJsonsByQueueIdWithLimit(this.id, limit);
+        const queueModifiedAt = this._getEmulator().selectModifiedAtById(this.id);
         return {
             limit,
             queueModifiedAt,
@@ -76,7 +171,7 @@ class RequestQueueClient extends ResourceClient {
         }));
 
         const requestModel = this._createRequestModel(request, options.forefront);
-        return this.dbClient.addRequest(requestModel);
+        return this._getEmulator().addRequest(requestModel);
     }
 
     /**
@@ -85,8 +180,8 @@ class RequestQueueClient extends ResourceClient {
      */
     async getRequest(id) {
         ow(id, ow.string);
-        this.dbClient.updateAccessedAtById(this.id);
-        const json = this.dbClient.selectRequestJsonByIdAndQueueId(id, this.id);
+        this._getEmulator().updateAccessedAtById(this.id);
+        const json = this._getEmulator().selectRequestJsonByIdAndQueueId(id, this.id);
         return this._jsonToRequest(json);
     }
 
@@ -107,12 +202,12 @@ class RequestQueueClient extends ResourceClient {
         }));
 
         const requestModel = this._createRequestModel(request, options.forefront);
-        return this.dbClient.updateRequest(requestModel);
+        return this._getEmulator().updateRequest(requestModel);
     }
 
-    async deleteRequest(id) {
-        ow(id, ow.string);
-        this.dbClient.deleteById(id);
+    async deleteRequest() {
+        // TODO Deletion is done, but we also need to update request counts in a transaction.
+        throw new Error('This method is not implemented in @apify/storage-local yet.');
     }
 
     /**

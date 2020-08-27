@@ -1,49 +1,26 @@
-const Database = require('better-sqlite3');
 const fs = require('fs-extra');
 const path = require('path');
 const ApifyStorageLocal = require('../src/index');
+const { STORAGE_NAMES } = require('../src/consts');
+const { prepareTestDir, removeTestDir } = require('./_tools');
 
-const TEMP_DIR = path.join(__dirname, 'tmp');
-
-beforeAll(() => {
-    fs.ensureDirSync(TEMP_DIR);
+let STORAGE_DIR;
+beforeEach(() => {
+    STORAGE_DIR = prepareTestDir();
 });
 
 afterAll(() => {
-    fs.removeSync(TEMP_DIR);
+    removeTestDir(STORAGE_DIR);
 });
 
-afterEach(() => {
-    fs.emptyDirSync(TEMP_DIR);
-});
-
-test('creates database in memory', () => {
-    const storage = new ApifyStorageLocal({
-        inMemory: true,
+test('creates correct folders', () => {
+    const storageLocal = new ApifyStorageLocal({ // eslint-disable-line
+        storageDir: STORAGE_DIR,
     });
-    expect(storage.db).toBeInstanceOf(Database);
-    expect(fs.readdirSync(TEMP_DIR)).toHaveLength(0);
-    storage.closeDatabase();
-});
-
-test('creates database in file', () => {
-    const storage = new ApifyStorageLocal({
-        storageDir: TEMP_DIR,
-    });
-    const dbFile = 'db.sqlite';
-    expect(storage.db).toBeInstanceOf(Database);
-    expect(fs.readdirSync(TEMP_DIR)).toEqual([
-        dbFile,
-        ...ApifyStorageLocal.DATABASE_FILE_SUFFIXES.map((sfx) => `${dbFile}${sfx}`),
-    ]);
-    storage.dropDatabase();
-});
-
-test('dropDatabase removes database files', () => {
-    const storage = new ApifyStorageLocal({
-        storageDir: TEMP_DIR,
-    });
-
-    storage.dropDatabase();
-    expect(fs.readdirSync(TEMP_DIR)).toHaveLength(0);
+    const requestQueueDir = path.join(STORAGE_DIR, STORAGE_NAMES.REQUEST_QUEUES);
+    const keyValueStoreDir = path.join(STORAGE_DIR, STORAGE_NAMES.KEY_VALUE_STORES);
+    const datasetDir = path.join(STORAGE_DIR, STORAGE_NAMES.DATASETS);
+    for (const dir of [requestQueueDir, keyValueStoreDir, datasetDir]) {
+        expect(fs.statSync(dir).isDirectory()).toBe(true);
+    }
 });
