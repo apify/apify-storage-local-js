@@ -33,6 +33,53 @@ class DatasetClient {
         this.itemCount = undefined;
     }
 
+    async get() {
+        try {
+            this._ensureItemCount();
+            const stats = await fs.stat(this.storeDir);
+            // The platform treats writes as access, but filesystem does not,
+            // so if the modification time is more recent, use that.
+            const accessedTimestamp = Math.max(stats.mtime.getTime(), stats.atime.getTime());
+            return {
+                id: this.name,
+                name: this.name,
+                createdAt: stats.birthtime,
+                modifiedAt: stats.mtime,
+                accessedAt: new Date(accessedTimestamp),
+                itemCount: this.itemCount,
+            };
+        } catch (err) {
+            if (err.code !== 'ENOENT') throw err;
+        }
+    }
+
+    async update(newFields) {
+        // The validation is intentionally loose to prevent issues
+        // when swapping to a remote storage in production.
+        ow(newFields, ow.object.partialShape({
+            name: ow.optional.string.minLength(1),
+        }));
+        if (!newFields.name) return;
+
+        const newPath = path.join(path.dirname(this.storeDir), newFields.name);
+        try {
+            await fs.move(this.storeDir, newPath);
+        } catch (err) {
+            if (/dest already exists/.test(err.message)) {
+                throw new Error('Dataset name is not unique.');
+            } else if (err.code === 'ENOENT') {
+                this._throw404();
+            } else {
+                throw err;
+            }
+        }
+        this.name = newFields.name;
+    }
+
+    async delete() {
+        await fs.remove(this.storeDir);
+    }
+
     async export() {
         throw new Error('This method is not implemented in @apify/storage-local yet.');
     }
@@ -68,6 +115,7 @@ class DatasetClient {
             items.push(item);
         }
 
+        await this._updateTimestamps();
         return {
             items: desc ? items.reverse() : items,
             total: this.itemCount,
@@ -91,13 +139,14 @@ class DatasetClient {
 
         if (!Array.isArray(items)) items = [items];
         const promises = items.map((item) => {
-            this.counter++;
+            this.itemCount++;
 
             if (typeof item !== 'string') item = JSON.stringify(item, null, 2);
-            const filePath = path.join(this.storeDir, this._getItemFileName(this.counter));
+            const filePath = path.join(this.storeDir, this._getItemFileName(this.itemCount));
 
             return fs.writeFile(filePath, item);
         });
+        await this._updateTimestamps({ mtime: true });
         await Promise.all(promises);
     }
 
@@ -109,7 +158,7 @@ class DatasetClient {
             files = fs.readdirSync(this.storeDir);
         } catch (err) {
             if (err.code === 'ENOENT') {
-                throw new Error(`Dataset with id: ${this.name} does not exist.`);
+                this._throw404();
             } else {
                 throw err;
             }
@@ -125,7 +174,8 @@ class DatasetClient {
     }
 
     _getItemFileName(index) {
-        return `${index}.json`.padStart(LOCAL_FILENAME_DIGITS, '0');
+        const name = `${index}`.padStart(LOCAL_FILENAME_DIGITS, '0');
+        return `${name}.json`;
     }
 
     /**
@@ -150,6 +200,27 @@ class DatasetClient {
 
         const json = await fs.readFile(filePath, 'utf8');
         return JSON.parse(json);
+    }
+
+    _throw404() {
+        const err = new Error(`Dataset with id: ${this.name} does not exist.`);
+        err.code = 'ENOENT';
+        throw err;
+    }
+
+    /**
+     * @param {object} [options]
+     * @param {boolean} [options.mtime]
+     * @private
+     */
+    async _updateTimestamps({ mtime } = {}) {
+        const now = Date.now();
+        if (mtime) {
+            await fs.utimes(this.storeDir, now, now);
+        } else {
+            const stats = await fs.stat(this.storeDir);
+            await fs.utimes(this.storeDir, now, stats.mtime);
+        }
     }
 }
 

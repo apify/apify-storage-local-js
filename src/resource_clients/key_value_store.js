@@ -45,7 +45,7 @@ class KeyValueStoreClient {
             const stats = await fs.stat(this.storeDir);
             // The platform treats writes as access, but filesystem does not,
             // so if the modification time is more recent, use that.
-            const accessedTimestamp = Math.max(stats.mtime.getTime(), stats.atime.getTime());
+            const accessedTimestamp = Math.max(stats.atimeMs, stats.mtimeMs);
             return {
                 id: this.name,
                 name: this.name,
@@ -146,6 +146,7 @@ class KeyValueStoreClient {
             ? undefined
             : lastSelectedItem.key;
 
+        await this._updateTimestamps();
         return {
             count: items.length,
             limit,
@@ -198,6 +199,7 @@ class KeyValueStoreClient {
             record.value = maybeParseBody(record.value, record.contentType);
         }
 
+        await this._updateTimestamps();
         return record;
     }
 
@@ -248,6 +250,7 @@ class KeyValueStoreClient {
                 throw new Error(`Error writing file '${key}' in directory '${this.storeDir}'.\nCause: ${err.message}`);
             }
         }
+        await this._updateTimestamps({ mtime: true });
     }
 
     /**
@@ -257,7 +260,8 @@ class KeyValueStoreClient {
     async deleteRecord(key) {
         ow(key, ow.string);
         try {
-            await this._handleFile(key, fs.unlink);
+            const result = await this._handleFile(key, fs.unlink);
+            if (result) await this._updateTimestamps({ mtime: true });
         } catch (err) {
             if (err.code === 'ENOENT') {
                 throw err;
@@ -336,6 +340,21 @@ class KeyValueStoreClient {
         const err = new Error(`Key-value store with id: ${this.name} does not exist.`);
         err.code = 'ENOENT';
         throw err;
+    }
+
+    /**
+     * @param {object} [options]
+     * @param {boolean} [options.mtime]
+     * @private
+     */
+    async _updateTimestamps({ mtime } = {}) {
+        const now = Date.now();
+        if (mtime) {
+            await fs.utimes(this.storeDir, now, now);
+        } else {
+            const stats = await fs.stat(this.storeDir);
+            await fs.utimes(this.storeDir, now, stats.mtime);
+        }
     }
 }
 

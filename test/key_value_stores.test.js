@@ -43,101 +43,35 @@ test('stores directory exists', () => {
     expect(subDirs).toContain(STORAGE_NAMES.KEY_VALUE_STORES);
 });
 
-describe('timestamps:', () => {
-    const storeName = 'first';
-    const testInitTimestamp = Date.now();
-    function getStats(name) {
-        const stats = fs.statSync(storeNameToDir(name));
-        return {
-            accessedAt: stats.atime,
-            modifiedAt: stats.mtime,
-            createdAt: stats.birthtime,
-        };
-    }
-
-    test('createdAt has a valid date', async () => {
-        const { createdAt } = await storageLocal.keyValueStore(storeName).get();
-        const createdAtTimestamp = createdAt.getTime();
-        expect(createdAtTimestamp).toBeGreaterThan(testInitTimestamp);
-        expect(createdAtTimestamp).toBeLessThan(Date.now());
-    });
-
-    // Record updates do not update timestamps on folders and thus
-    // this will never work. It's probably not that important for local.
-    test.skip('get updated on record update', () => {
-        const beforeUpdate = getStats(storeName);
-        const record = numToRecord(1);
-        fs.writeFileSync(path.join(storeNameToDir(storeName), record.filename), 'abc');
-        const afterUpdate = getStats(storeName);
-        expect(afterUpdate.modifiedAt.getTime()).toBeGreaterThan(beforeUpdate.modifiedAt.getTime());
-        expect(afterUpdate.accessedAt.getTime()).toBeGreaterThan(beforeUpdate.accessedAt.getTime());
-    });
-
-    test('get updated on record insert', async () => {
-        const beforeUpdate = getStats(storeName);
-        const record = numToRecord(100);
-        fs.writeFileSync(path.join(storeNameToDir(storeName), record.filename), record.value);
-        const afterUpdate = await storageLocal.keyValueStore(storeName).get();
-        expect(afterUpdate.modifiedAt.getTime()).toBeGreaterThan(beforeUpdate.modifiedAt.getTime());
-        expect(afterUpdate.accessedAt.getTime()).toBeGreaterThan(beforeUpdate.accessedAt.getTime());
-    });
-
-    test('get updated on record delete', async () => {
-        const beforeUpdate = getStats(storeName);
-        const record = numToRecord(1);
-        fs.unlinkSync(path.join(storeNameToDir(storeName), record.filename));
-        const afterUpdate = await storageLocal.keyValueStore(storeName).get();
-        expect(afterUpdate.modifiedAt.getTime()).toBeGreaterThan(beforeUpdate.modifiedAt.getTime());
-        expect(afterUpdate.accessedAt.getTime()).toBeGreaterThan(beforeUpdate.accessedAt.getTime());
-    });
-
-    test('getRecord updates accessedAt', async () => {
-        const beforeGet = getStats(storeName);
-        const { key } = numToRecord(1);
-        await storageLocal.keyValueStore(storeName).getRecord(key);
-        const afterGet = await storageLocal.keyValueStore(storeName).get();
-        expect(beforeGet.modifiedAt.getTime()).toBe(afterGet.modifiedAt.getTime());
-        expect(afterGet.accessedAt.getTime()).toBeGreaterThan(beforeGet.accessedAt.getTime());
-    });
-
-    test('listKeys updates accessedAt', async () => {
-        const beforeGet = getStats(storeName);
-        await storageLocal.keyValueStore(storeName).listKeys();
-        const afterGet = await storageLocal.keyValueStore(storeName).get();
-        expect(beforeGet.modifiedAt.getTime()).toBe(afterGet.modifiedAt.getTime());
-        expect(afterGet.accessedAt.getTime()).toBeGreaterThan(beforeGet.accessedAt.getTime());
-    });
-});
-
 describe('get store', () => {
     test('returns correct store', async () => {
-        let queue = await storageLocal.keyValueStore('first').get();
-        expect(queue.id).toBe('first');
-        expect(queue.name).toBe('first');
-        queue = await storageLocal.keyValueStore('second').get();
-        expect(queue.id).toBe('second');
-        expect(queue.name).toBe('second');
+        let store = await storageLocal.keyValueStore('first').get();
+        expect(store.id).toBe('first');
+        expect(store.name).toBe('first');
+        store = await storageLocal.keyValueStore('second').get();
+        expect(store.id).toBe('second');
+        expect(store.name).toBe('second');
     });
 
     test('returns undefined for non-existent stores', async () => {
-        const queue = await storageLocal.keyValueStore('3').get();
-        expect(queue).toBeUndefined();
+        const store = await storageLocal.keyValueStore('3').get();
+        expect(store).toBeUndefined();
     });
 });
 
 describe('getOrCreate', () => {
     test('returns existing store by name', async () => {
-        const queue = await storageLocal.keyValueStores().getOrCreate('first');
-        expect(queue.id).toBe('first');
+        const store = await storageLocal.keyValueStores().getOrCreate('first');
+        expect(store.id).toBe('first');
         const count = counter.stores();
         expect(count).toBe(2);
     });
 
     test('creates a new store with name', async () => {
-        const queueName = 'third';
-        const queue = await storageLocal.keyValueStores().getOrCreate(queueName);
-        expect(queue.id).toBe('third');
-        expect(queue.name).toBe(queueName);
+        const storeName = 'third';
+        const store = await storageLocal.keyValueStores().getOrCreate(storeName);
+        expect(store.id).toBe('third');
+        expect(store.name).toBe(storeName);
         const count = counter.stores();
         expect(count).toBe(3);
     });
@@ -369,6 +303,62 @@ describe('listKeys', () => {
                 expect(err.message).toBe(`Key-value store with id: ${id} does not exist.`);
             }
         });
+    });
+});
+
+describe('timestamps:', () => {
+    const storeName = 'first';
+    const testInitTimestamp = Date.now();
+
+    test('createdAt has a valid date', async () => {
+        const { createdAt } = await storageLocal.keyValueStore(storeName).get();
+        const createdAtTimestamp = createdAt.getTime();
+        expect(createdAtTimestamp).toBeGreaterThan(testInitTimestamp);
+        expect(createdAtTimestamp).toBeLessThan(Date.now());
+    });
+
+    test('get updated on record update', async () => {
+        const beforeUpdate = await storageLocal.keyValueStore(storeName).get();
+        const record = numToRecord(1);
+        await storageLocal.keyValueStore(storeName).setRecord(stripRecord(record));
+        const afterUpdate = await storageLocal.keyValueStore(storeName).get();
+        expect(afterUpdate.modifiedAt.getTime()).toBeGreaterThan(beforeUpdate.modifiedAt.getTime());
+        expect(afterUpdate.accessedAt.getTime()).toBeGreaterThan(beforeUpdate.accessedAt.getTime());
+    });
+
+    test('get updated on record insert', async () => {
+        const beforeUpdate = await storageLocal.keyValueStore(storeName).get();
+        const record = numToRecord(100);
+        await storageLocal.keyValueStore(storeName).setRecord(stripRecord(record));
+        const afterUpdate = await storageLocal.keyValueStore(storeName).get();
+        expect(afterUpdate.modifiedAt.getTime()).toBeGreaterThan(beforeUpdate.modifiedAt.getTime());
+        expect(afterUpdate.accessedAt.getTime()).toBeGreaterThan(beforeUpdate.accessedAt.getTime());
+    });
+
+    test('get updated on record delete', async () => {
+        const beforeUpdate = await storageLocal.keyValueStore(storeName).get();
+        const record = numToRecord(1);
+        await storageLocal.keyValueStore(storeName).deleteRecord(record.key);
+        const afterUpdate = await storageLocal.keyValueStore(storeName).get();
+        expect(afterUpdate.modifiedAt.getTime()).toBeGreaterThan(beforeUpdate.modifiedAt.getTime());
+        expect(afterUpdate.accessedAt.getTime()).toBeGreaterThan(beforeUpdate.accessedAt.getTime());
+    });
+
+    test('getRecord updates accessedAt', async () => {
+        const beforeGet = await storageLocal.keyValueStore(storeName).get();
+        const { key } = numToRecord(1);
+        await storageLocal.keyValueStore(storeName).getRecord(key);
+        const afterGet = await storageLocal.keyValueStore(storeName).get();
+        expect(beforeGet.modifiedAt.getTime()).toBe(afterGet.modifiedAt.getTime());
+        expect(afterGet.accessedAt.getTime()).toBeGreaterThan(beforeGet.accessedAt.getTime());
+    });
+
+    test('listKeys updates accessedAt', async () => {
+        const beforeGet = await storageLocal.keyValueStore(storeName).get();
+        await storageLocal.keyValueStore(storeName).listKeys();
+        const afterGet = await storageLocal.keyValueStore(storeName).get();
+        expect(beforeGet.modifiedAt.getTime()).toBe(afterGet.modifiedAt.getTime());
+        expect(afterGet.accessedAt.getTime()).toBeGreaterThan(beforeGet.accessedAt.getTime());
     });
 });
 

@@ -3,6 +3,8 @@ const ow = require('ow');
 const path = require('path');
 const { STORAGE_NAMES } = require('./consts');
 const DatabaseConnectionCache = require('./database_connection_cache');
+const DatasetClient = require('./resource_clients/dataset');
+const DatasetCollectionClient = require('./resource_clients/dataset_collection');
 const KeyValueStoreClient = require('./resource_clients/key_value_store');
 const KeyValueStoreCollectionClient = require('./resource_clients/key_value_store_collection');
 const RequestQueueClient = require('./resource_clients/request_queue');
@@ -45,6 +47,20 @@ class ApifyStorageLocal {
         fs.ensureDirSync(this.requestQueueDir);
         fs.ensureDirSync(this.keyValueStoreDir);
         fs.ensureDirSync(this.datasetDir);
+    }
+
+    datasets() {
+        return new DatasetCollectionClient({
+            storageDir: this.datasetDir,
+        });
+    }
+
+    dataset(id) {
+        ow(id, ow.string);
+        return new DatasetClient({
+            name: id,
+            storageDir: this.datasetDir,
+        });
     }
 
     keyValueStores() {
