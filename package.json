@@ -1,7 +1,7 @@
 {
     "name": "@apify/storage-local",
-    "version": "0.2.0",
-    "description": "Drop in replacement of Apify API with a local SQLite database. Not all API features are supported.",
+    "version": "1.0.0",
+    "description": "Drop in replacement of Apify API with a local SQLite and filesystem implementation. Not all API features are supported.",
     "engines": {
         "node": ">=10.17.0"
     },
@@ -46,10 +46,10 @@
         "@apify/eslint-config": "^0.1.0",
         "@types/better-sqlite3": "^5.4.0",
         "@types/fs-extra": "^9.0.1",
-        "@types/jest": "^26.0.3",
+        "@types/jest": "^26.0.13",
         "@types/node": "^14",
-        "eslint": "^7.3.1",
+        "eslint": "^7.8.1",
         "fs-extra": "^9.0.1",
-        "jest": "^26.1.0"
+        "jest": "^26.4.2"
     }
 }

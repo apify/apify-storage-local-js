@@ -23,7 +23,6 @@ const databaseConnectionCache = new DatabaseConnectionCache();
 
 /**
  * Represents local emulation of [Apify Storage](https://apify.com/storage).
- * Only Request Queue emulation is currently supported.
  */
 class ApifyStorageLocal {
     /**
@@ -49,12 +48,19 @@ class ApifyStorageLocal {
         fs.ensureDirSync(this.datasetDir);
     }
 
+    /**
+     * @return {DatasetCollectionClient}
+     */
     datasets() {
         return new DatasetCollectionClient({
             storageDir: this.datasetDir,
         });
     }
 
+    /**
+     * @param {string} id
+     * @return {DatasetClient}
+     */
     dataset(id) {
         ow(id, ow.string);
         return new DatasetClient({
@@ -63,12 +69,19 @@ class ApifyStorageLocal {
         });
     }
 
+    /**
+     * @return {KeyValueStoreCollectionClient}
+     */
     keyValueStores() {
         return new KeyValueStoreCollectionClient({
             storageDir: this.keyValueStoreDir,
         });
     }
 
+    /**
+     * @param {string} id
+     * @return {KeyValueStoreClient}
+     */
     keyValueStore(id) {
         ow(id, ow.string);
         return new KeyValueStoreClient({
@@ -77,6 +90,9 @@ class ApifyStorageLocal {
         });
     }
 
+    /**
+     * @return {RequestQueueCollectionClient}
+     */
     requestQueues() {
         return new RequestQueueCollectionClient({
             storageDir: this.requestQueueDir,
@@ -84,6 +100,10 @@ class ApifyStorageLocal {
         });
     }
 
+    /**
+     * @param {string} id
+     * @return {RequestQueueClient}
+     */
     requestQueue(id) {
         ow(id, ow.string);
         return new RequestQueueClient({
