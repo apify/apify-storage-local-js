@@ -9,8 +9,6 @@ const { DEFAULT_API_PARAM_LIMIT } = require('../consts');
 
 const DEFAULT_LOCAL_FILE_EXTENSION = 'bin';
 const COMMON_LOCAL_FILE_EXTENSIONS = ['json', 'jpeg', 'png', 'html', 'jpg', 'bin', 'txt', 'xml', 'pdf', 'mp3', 'js', 'css', 'csv'];
-const CONTENT_TYPE_JSON = 'application/json; charset=utf-8';
-const DEFAULT_CONTENT_TYPE = 'application/octet-stream';
 
 const streamFinished = util.promisify(stream.finished);
 
@@ -210,7 +208,7 @@ class KeyValueStoreClient {
     async setRecord(record) {
         ow(record, ow.object.exactShape({
             key: ow.string,
-            value: ow.any(ow.string, ow.object.plain, ow.number, ow.buffer, ow.object.instanceOf(stream.Readable)),
+            value: ow.any(ow.null, ow.string, ow.number, ow.object),
             contentType: ow.optional.string.nonEmpty,
         }));
 
@@ -218,22 +216,25 @@ class KeyValueStoreClient {
         let { value, contentType } = record;
 
         // To allow saving Objects to JSON without providing content type
-        const isValuePlainObject = ow.isValid(value, ow.object.plain);
+        const isValueStreamOrBuffer = ow.isValid(value, ow.any(ow.buffer, ow.object.hasKeys('on', 'pipe')));
         if (!contentType) {
-            contentType = isValuePlainObject
-                ? CONTENT_TYPE_JSON
-                : DEFAULT_CONTENT_TYPE;
+            contentType = isValueStreamOrBuffer
+                ? 'application/octet-stream'
+                : 'application/json; charset=utf-8';
         }
 
         const extension = mime.extension(contentType) || DEFAULT_LOCAL_FILE_EXTENSION;
         const filePath = this._resolvePath(`${key}.${extension}`);
 
-        // Could be different charset or separators could
-        // be different from CONTENT_TYPE_JSON constant
         const isContentTypeJson = extension === 'json';
 
-        if (isValuePlainObject && isContentTypeJson) {
-            value = JSON.stringify(value, null, 2);
+        if (isContentTypeJson && !isValueStreamOrBuffer) {
+            try {
+                value = JSON.stringify(value, null, 2);
+            } catch (err) {
+                const msg = `The record value cannot be stringified to JSON. Please provide other content type.\nCause: ${err.message}`;
+                throw new Error(msg);
+            }
         }
 
         try {
