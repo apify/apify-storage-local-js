@@ -30,7 +30,7 @@ class RequestQueueCollectionClient {
     }
 
     async getOrCreate(name) {
-        ow(name, ow.string);
+        ow(name, ow.string.nonEmpty);
         const queueDir = path.join(this.storageDir, name);
         await fs.ensureDir(queueDir);
         const emulator = new RequestQueueEmulator({

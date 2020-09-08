@@ -25,7 +25,7 @@ class KeyValueStoreCollectionClient {
     }
 
     async getOrCreate(name) {
-        ow(name, ow.optional.string);
+        ow(name, ow.string.nonEmpty);
         const storePath = path.join(this.storageDir, name);
         await fs.ensureDir(storePath);
         const stats = await fs.stat(storePath);
