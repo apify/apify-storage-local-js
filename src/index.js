@@ -102,10 +102,15 @@ class ApifyStorageLocal {
 
     /**
      * @param {string} id
+     * @param {object} options
      * @return {RequestQueueClient}
      */
-    requestQueue(id) {
+    requestQueue(id, options = {}) {
         ow(id, ow.string);
+        // Matching the Client validation.
+        ow(options, ow.object.exactShape({
+            clientKey: ow.optional.string,
+        }));
         return new RequestQueueClient({
             name: id,
             storageDir: this.requestQueueDir,

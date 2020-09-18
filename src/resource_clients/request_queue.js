@@ -9,7 +9,7 @@ const requestShape = {
     uniqueKey: ow.string,
     method: ow.optional.string,
     retryCount: ow.optional.number,
-    handledAt: ow.any(ow.string.date, ow.date, ow.undefined),
+    handledAt: ow.optional.any(ow.string.date, ow.date),
 };
 
 /**
@@ -157,7 +157,7 @@ class RequestQueueClient {
 
     /**
      * @param {object} request
-     * @param {object} options
+     * @param {object} [options]
      * @param {boolean} [options.forefront]
      * @returns {Promise<QueueOperationInfo>}
      */
