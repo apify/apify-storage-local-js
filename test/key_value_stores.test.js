@@ -117,6 +117,60 @@ describe('setRecord', () => {
         expect(savedData).toEqual(newRecord.value);
     });
 
+    test('setRecord() works with text', async () => {
+        const key = 'some-key';
+        const value = 'someValue';
+        const expectedExtension = '.txt';
+
+        const res = await storageLocal.keyValueStore(storeName).setRecord({ key, value });
+        expect(res).toBeUndefined();
+
+        const recordPath = path.join(storeNameToDir(storeName), key + expectedExtension);
+        const savedData = await fs.readFile(recordPath, 'utf8');
+        expect(savedData).toEqual(value);
+    });
+
+    test('setRecord() works with object', async () => {
+        const key = 'some-key';
+        const value = { foo: 'bar', one: 1 };
+        const expectedExtension = '.json';
+
+        const res = await storageLocal.keyValueStore(storeName).setRecord({ key, value });
+        expect(res).toBeUndefined();
+
+        const recordPath = path.join(storeNameToDir(storeName), key + expectedExtension);
+        const savedData = await fs.readFile(recordPath, 'utf8');
+        expect(JSON.parse(savedData)).toEqual(value);
+    });
+
+    test('setRecord() works with buffer', async () => {
+        const key = 'some-key';
+        const string = 'special chars 🤖✅';
+        const value = Buffer.from(string);
+        const expectedExtension = '.bin';
+
+        const res = await storageLocal.keyValueStore(storeName).setRecord({ key, value });
+        expect(res).toBeUndefined();
+
+        const recordPath = path.join(storeNameToDir(storeName), key + expectedExtension);
+        const savedData = await fs.readFile(recordPath);
+        expect(savedData).toEqual(value);
+    });
+
+    test('setRecord() works with pre-stringified JSON', async () => {
+        const key = 'some-key';
+        const contentType = 'application/json; charset=utf-8';
+        const value = JSON.stringify({ foo: 'bar', one: 1 });
+        const expectedExtension = '.json';
+
+        const res = await storageLocal.keyValueStore(storeName).setRecord({ key, value, contentType });
+        expect(res).toBeUndefined();
+
+        const recordPath = path.join(storeNameToDir(storeName), key + expectedExtension);
+        const savedData = await fs.readFile(recordPath, 'utf8');
+        expect(savedData).toEqual(value);
+    });
+
     describe('throws', () => {
         test('when store does not exist', async () => {
             const id = 'non-existent';

@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const ow = require('ow');
 const { REQUEST_ID_LENGTH } = require('./consts');
 /**
  * Removes all properties with a null value
@@ -32,3 +33,15 @@ exports.uniqueKeyToRequestId = (uniqueKey) => {
 
     return str.length > REQUEST_ID_LENGTH ? str.substr(0, REQUEST_ID_LENGTH) : str;
 };
+
+/**
+ * @param {*} value
+ * @return {boolean}
+ */
+exports.isBuffer = (value) => ow.isValid(value, ow.any(ow.buffer, ow.arrayBuffer, ow.typedArray));
+
+/**
+ * @param {*} value
+ * @return {boolean}
+ */
+exports.isStream = (value) => ow.isValid(value, ow.object.hasKeys('on', 'pipe'));

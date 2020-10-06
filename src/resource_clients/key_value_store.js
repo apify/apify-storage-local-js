@@ -4,6 +4,7 @@ const ow = require('ow');
 const path = require('path');
 const stream = require('stream');
 const util = require('util');
+const { isStream, isBuffer } = require('../utils');
 const { maybeParseBody } = require('../body_parser');
 const { DEFAULT_API_PARAM_LIMIT } = require('../consts');
 
@@ -215,12 +216,12 @@ class KeyValueStoreClient {
         const { key } = record;
         let { value, contentType } = record;
 
+        const isValueStreamOrBuffer = isStream(value) || isBuffer(value);
         // To allow saving Objects to JSON without providing content type
-        const isValueStreamOrBuffer = ow.isValid(value, ow.any(ow.buffer, ow.object.hasKeys('on', 'pipe')));
         if (!contentType) {
-            contentType = isValueStreamOrBuffer
-                ? 'application/octet-stream'
-                : 'application/json; charset=utf-8';
+            if (isValueStreamOrBuffer) contentType = 'application/octet-stream';
+            else if (typeof value === 'string') contentType = 'text/plain; charset=utf-8';
+            else contentType = 'application/json; charset=utf-8';
         }
 
         const extension = mime.extension(contentType) || DEFAULT_LOCAL_FILE_EXTENSION;
@@ -228,7 +229,7 @@ class KeyValueStoreClient {
 
         const isContentTypeJson = extension === 'json';
 
-        if (isContentTypeJson && !isValueStreamOrBuffer) {
+        if (isContentTypeJson && !isValueStreamOrBuffer && typeof value !== 'string') {
             try {
                 value = JSON.stringify(value, null, 2);
             } catch (err) {
