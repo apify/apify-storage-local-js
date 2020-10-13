@@ -33,6 +33,9 @@ class DatasetClient {
         this.itemCount = undefined;
     }
 
+    /**
+     * @return {Promise<Dataset>}
+     */
     async get() {
         try {
             this._ensureItemCount();
@@ -53,6 +56,11 @@ class DatasetClient {
         }
     }
 
+    /**
+     * @param {object} newFields
+     * @param {string} [newFields.name]
+     * @return {Promise<void>}
+     */
     async update(newFields) {
         // The validation is intentionally loose to prevent issues
         // when swapping to a remote storage in production.
@@ -84,6 +92,13 @@ class DatasetClient {
         throw new Error('This method is not implemented in @apify/storage-local yet.');
     }
 
+    /**
+     * @param {object} [options]
+     * @param {boolean} [options.desc]
+     * @param {number} [options.limit]
+     * @param {number} [options.offset]
+     * @return {Promise<PaginationList>}
+     */
     async listItems(options = {}) {
         this._ensureItemCount();
         // The extra code is to enable a custom validation message.
@@ -150,6 +165,9 @@ class DatasetClient {
         await Promise.all(promises);
     }
 
+    /**
+     * @private
+     */
     _ensureItemCount() {
         if (typeof this.itemCount === 'number') return;
 
@@ -173,6 +191,11 @@ class DatasetClient {
         }
     }
 
+    /**
+     * @param {number} index
+     * @return {string}
+     * @private
+     */
     _getItemFileName(index) {
         const name = `${index}`.padStart(LOCAL_FILENAME_DIGITS, '0');
         return `${name}.json`;
@@ -202,6 +225,9 @@ class DatasetClient {
         return JSON.parse(json);
     }
 
+    /**
+     * @private
+     */
     _throw404() {
         const err = new Error(`Dataset with id: ${this.name} does not exist.`);
         err.code = 'ENOENT';

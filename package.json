@@ -1,6 +1,6 @@
 {
     "name": "@apify/storage-local",
-    "version": "1.0.0-beta.4",
+    "version": "1.0.0-beta.5",
     "description": "Drop in replacement of Apify API with a local SQLite and filesystem implementation. Not all API features are supported.",
     "engines": {
         "node": ">=10.17.0"

@@ -43,15 +43,18 @@ class ApifyStorageLocal {
         this.datasetDir = path.resolve(storageDir, STORAGE_NAMES.DATASETS);
         this.dbConnections = databaseConnectionCache;
 
-        fs.ensureDirSync(this.requestQueueDir);
-        fs.ensureDirSync(this.keyValueStoreDir);
-        fs.ensureDirSync(this.datasetDir);
+        // To prevent directories from being created immediately when
+        // an ApifyClient instance is constructed, we create them lazily.
+        this.isRequestQueueDirInitialized = false;
+        this.isKeyValueStoreDirInitialized = false;
+        this.isDatasetDirInitialized = false;
     }
 
     /**
      * @return {DatasetCollectionClient}
      */
     datasets() {
+        this._ensureDatasetDir();
         return new DatasetCollectionClient({
             storageDir: this.datasetDir,
         });
@@ -63,6 +66,7 @@ class ApifyStorageLocal {
      */
     dataset(id) {
         ow(id, ow.string);
+        this._ensureDatasetDir();
         return new DatasetClient({
             name: id,
             storageDir: this.datasetDir,
@@ -73,6 +77,7 @@ class ApifyStorageLocal {
      * @return {KeyValueStoreCollectionClient}
      */
     keyValueStores() {
+        this._ensureKeyValueStoreDir();
         return new KeyValueStoreCollectionClient({
             storageDir: this.keyValueStoreDir,
         });
@@ -84,6 +89,7 @@ class ApifyStorageLocal {
      */
     keyValueStore(id) {
         ow(id, ow.string);
+        this._ensureKeyValueStoreDir();
         return new KeyValueStoreClient({
             name: id,
             storageDir: this.keyValueStoreDir,
@@ -94,6 +100,7 @@ class ApifyStorageLocal {
      * @return {RequestQueueCollectionClient}
      */
     requestQueues() {
+        this._ensureRequestQueueDir();
         return new RequestQueueCollectionClient({
             storageDir: this.requestQueueDir,
             dbConnections: this.dbConnections,
@@ -111,11 +118,39 @@ class ApifyStorageLocal {
         ow(options, ow.object.exactShape({
             clientKey: ow.optional.string,
         }));
+        this._ensureRequestQueueDir();
         return new RequestQueueClient({
             name: id,
             storageDir: this.requestQueueDir,
             dbConnections: this.dbConnections,
         });
+    }
+
+    /**
+     * @private
+     */
+    _ensureDatasetDir() {
+        if (!this.isDatasetDirInitialized) {
+            fs.ensureDirSync(this.datasetDir);
+        }
+    }
+
+    /**
+     * @private
+     */
+    _ensureKeyValueStoreDir() {
+        if (!this.isKeyValueStoreDirInitialized) {
+            fs.ensureDirSync(this.keyValueStoreDir);
+        }
+    }
+
+    /**
+     * @private
+     */
+    _ensureRequestQueueDir() {
+        if (!this.isRequestQueueDirInitialized) {
+            fs.ensureDirSync(this.requestQueueDir);
+        }
     }
 }
 
