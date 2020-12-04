@@ -352,16 +352,13 @@ class KeyValueStoreClient {
     _updateTimestamps({ mtime } = {}) {
         // It's throwing EINVAL on Windows. Not sure why,
         // so the function is a best effort only.
-        const now = Date.now();
+        const now = new Date();
         let promise;
         if (mtime) {
             promise = fs.utimes(this.storeDir, now, now);
         } else {
             promise = fs.stat(this.storeDir)
-                .then((stats) => {
-                    const timestamp = stats.mtime instanceof Date ? stats.mtime : stats.ctime;
-                    return fs.utimes(this.storeDir, now, timestamp);
-                });
+                .then((stats) => fs.utimes(this.storeDir, now, stats.mtime));
         }
         promise.catch(() => { /* we don't care that much if it sometimes fails */ });
     }
