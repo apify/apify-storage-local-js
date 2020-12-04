@@ -31,6 +31,7 @@ class DatasetClient {
         this.name = name;
         this.storeDir = path.join(storageDir, name);
         this.itemCount = undefined;
+        this.updatingTimestamps = false;
     }
 
     /**
@@ -130,7 +131,7 @@ class DatasetClient {
             items.push(item);
         }
 
-        await this._updateTimestamps();
+        this._updateTimestamps();
         return {
             items: desc ? items.reverse() : items,
             total: this.itemCount,
@@ -161,8 +162,9 @@ class DatasetClient {
 
             return fs.writeFile(filePath, item);
         });
-        await this._updateTimestamps({ mtime: true });
+
         await Promise.all(promises);
+        this._updateTimestamps({ mtime: true });
     }
 
     /**
@@ -239,14 +241,18 @@ class DatasetClient {
      * @param {boolean} [options.mtime]
      * @private
      */
-    async _updateTimestamps({ mtime } = {}) {
-        const now = Date.now();
+    _updateTimestamps({ mtime } = {}) {
+        // It's throwing EINVAL on Windows. Not sure why,
+        // so the function is a best effort only.
+        const now = new Date();
+        let promise;
         if (mtime) {
-            await fs.utimes(this.storeDir, now, now);
+            promise = fs.utimes(this.storeDir, now, now);
         } else {
-            const stats = await fs.stat(this.storeDir);
-            await fs.utimes(this.storeDir, now, stats.mtime);
+            promise = fs.stat(this.storeDir)
+                .then((stats) => fs.utimes(this.storeDir, now, stats.mtime));
         }
+        promise.catch(() => { /* we don't care that much if it sometimes fails */ });
     }
 }
 

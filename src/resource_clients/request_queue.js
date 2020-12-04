@@ -101,9 +101,7 @@ class RequestQueueClient {
         const newPath = path.join(path.dirname(this.queueDir), newFields.name);
 
         // To prevent chaos, we close the database connection before moving the folder.
-        if (this.emulator) {
-            this.emulator.disconnect();
-        }
+        this._getEmulator().disconnect();
 
         try {
             await fs.move(this.queueDir, newPath);
@@ -124,9 +122,7 @@ class RequestQueueClient {
     }
 
     async delete() {
-        if (this.emulator) {
-            this.emulator.disconnect();
-        }
+        this._getEmulator().disconnect();
 
         await fs.remove(this.queueDir);
     }

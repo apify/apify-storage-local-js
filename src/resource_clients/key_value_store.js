@@ -145,7 +145,7 @@ class KeyValueStoreClient {
             ? undefined
             : lastSelectedItem.key;
 
-        await this._updateTimestamps();
+        this._updateTimestamps();
         return {
             count: items.length,
             limit,
@@ -198,7 +198,7 @@ class KeyValueStoreClient {
             record.value = maybeParseBody(record.value, record.contentType);
         }
 
-        await this._updateTimestamps();
+        this._updateTimestamps();
         return record;
     }
 
@@ -252,7 +252,7 @@ class KeyValueStoreClient {
                 throw new Error(`Error writing file '${key}' in directory '${this.storeDir}'.\nCause: ${err.message}`);
             }
         }
-        await this._updateTimestamps({ mtime: true });
+        this._updateTimestamps({ mtime: true });
     }
 
     /**
@@ -263,7 +263,7 @@ class KeyValueStoreClient {
         ow(key, ow.string);
         try {
             const result = await this._handleFile(key, fs.unlink);
-            if (result) await this._updateTimestamps({ mtime: true });
+            if (result) this._updateTimestamps({ mtime: true });
         } catch (err) {
             if (err.code === 'ENOENT') {
                 throw err;
@@ -349,14 +349,18 @@ class KeyValueStoreClient {
      * @param {boolean} [options.mtime]
      * @private
      */
-    async _updateTimestamps({ mtime } = {}) {
-        const now = Date.now();
+    _updateTimestamps({ mtime } = {}) {
+        // It's throwing EINVAL on Windows. Not sure why,
+        // so the function is a best effort only.
+        const now = new Date();
+        let promise;
         if (mtime) {
-            await fs.utimes(this.storeDir, now, now);
+            promise = fs.utimes(this.storeDir, now, now);
         } else {
-            const stats = await fs.stat(this.storeDir);
-            await fs.utimes(this.storeDir, now, stats.mtime);
+            promise = fs.stat(this.storeDir)
+                .then((stats) => fs.utimes(this.storeDir, now, stats.mtime));
         }
+        promise.catch(() => { /* we don't care that much if it sometimes fails */ });
     }
 }
 
