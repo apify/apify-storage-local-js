@@ -365,6 +365,7 @@ describe('timestamps:', () => {
     const testInitTimestamp = Date.now();
 
     test('createdAt has a valid date', async () => {
+        await wait10ms();
         const { createdAt } = await storageLocal.keyValueStore(storeName).get();
         const createdAtTimestamp = createdAt.getTime();
         expect(createdAtTimestamp).toBeGreaterThan(testInitTimestamp);
@@ -375,6 +376,7 @@ describe('timestamps:', () => {
         const beforeUpdate = await storageLocal.keyValueStore(storeName).get();
         const record = numToRecord(1);
         await storageLocal.keyValueStore(storeName).setRecord(stripRecord(record));
+        await wait10ms();
         const afterUpdate = await storageLocal.keyValueStore(storeName).get();
         expect(afterUpdate.modifiedAt.getTime()).toBeGreaterThan(beforeUpdate.modifiedAt.getTime());
         expect(afterUpdate.accessedAt.getTime()).toBeGreaterThan(beforeUpdate.accessedAt.getTime());
@@ -384,6 +386,7 @@ describe('timestamps:', () => {
         const beforeUpdate = await storageLocal.keyValueStore(storeName).get();
         const record = numToRecord(100);
         await storageLocal.keyValueStore(storeName).setRecord(stripRecord(record));
+        await wait10ms();
         const afterUpdate = await storageLocal.keyValueStore(storeName).get();
         expect(afterUpdate.modifiedAt.getTime()).toBeGreaterThan(beforeUpdate.modifiedAt.getTime());
         expect(afterUpdate.accessedAt.getTime()).toBeGreaterThan(beforeUpdate.accessedAt.getTime());
@@ -393,6 +396,7 @@ describe('timestamps:', () => {
         const beforeUpdate = await storageLocal.keyValueStore(storeName).get();
         const record = numToRecord(1);
         await storageLocal.keyValueStore(storeName).deleteRecord(record.key);
+        await wait10ms();
         const afterUpdate = await storageLocal.keyValueStore(storeName).get();
         expect(afterUpdate.modifiedAt.getTime()).toBeGreaterThan(beforeUpdate.modifiedAt.getTime());
         expect(afterUpdate.accessedAt.getTime()).toBeGreaterThan(beforeUpdate.accessedAt.getTime());
@@ -402,6 +406,7 @@ describe('timestamps:', () => {
         const beforeGet = await storageLocal.keyValueStore(storeName).get();
         const { key } = numToRecord(1);
         await storageLocal.keyValueStore(storeName).getRecord(key);
+        await wait10ms();
         const afterGet = await storageLocal.keyValueStore(storeName).get();
         expect(beforeGet.modifiedAt.getTime()).toBe(afterGet.modifiedAt.getTime());
         expect(afterGet.accessedAt.getTime()).toBeGreaterThan(beforeGet.accessedAt.getTime());
@@ -410,11 +415,16 @@ describe('timestamps:', () => {
     test('listKeys updates accessedAt', async () => {
         const beforeGet = await storageLocal.keyValueStore(storeName).get();
         await storageLocal.keyValueStore(storeName).listKeys();
+        await wait10ms();
         const afterGet = await storageLocal.keyValueStore(storeName).get();
         expect(beforeGet.modifiedAt.getTime()).toBe(afterGet.modifiedAt.getTime());
         expect(afterGet.accessedAt.getTime()).toBeGreaterThan(beforeGet.accessedAt.getTime());
     });
 });
+
+async function wait10ms() {
+    return new Promise((r) => setTimeout(r, 10));
+}
 
 function seed(keyValueStoresDir) {
     Object.values(TEST_STORES).forEach((store) => {

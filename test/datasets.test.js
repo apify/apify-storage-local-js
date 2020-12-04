@@ -47,6 +47,7 @@ describe('timestamps:', () => {
     const testInitTimestamp = Date.now();
 
     test('createdAt has a valid date', async () => {
+        await wait10ms();
         const { createdAt } = await storageLocal.dataset(datasetName).get();
         const createdAtTimestamp = createdAt.getTime();
         expect(createdAtTimestamp).toBeGreaterThan(testInitTimestamp);
@@ -56,6 +57,7 @@ describe('timestamps:', () => {
     test('get updated on item insert', async () => {
         const beforeUpdate = await storageLocal.dataset(datasetName).get();
         await storageLocal.dataset(datasetName).pushItems({ foo: 'bar' });
+        await wait10ms();
         const afterUpdate = await storageLocal.dataset(datasetName).get();
         expect(afterUpdate.modifiedAt.getTime()).toBeGreaterThan(beforeUpdate.modifiedAt.getTime());
         expect(afterUpdate.accessedAt.getTime()).toBeGreaterThan(beforeUpdate.accessedAt.getTime());
@@ -64,6 +66,7 @@ describe('timestamps:', () => {
     test('listItems updates accessedAt', async () => {
         const beforeGet = await storageLocal.dataset(datasetName).get();
         await storageLocal.dataset(datasetName).listItems();
+        await wait10ms();
         const afterGet = await storageLocal.dataset(datasetName).get();
         expect(beforeGet.modifiedAt.getTime()).toBe(afterGet.modifiedAt.getTime());
         expect(afterGet.accessedAt.getTime()).toBeGreaterThan(beforeGet.accessedAt.getTime());
@@ -230,6 +233,10 @@ describe('listItems', () => {
         });
     });
 });
+
+async function wait10ms() {
+    return new Promise((r) => setTimeout(r, 10));
+}
 
 function seed(datasetsDir) {
     Object.values(TEST_DATASETS).forEach((dataset) => {
