@@ -1,6 +1,7 @@
 const fs = require('fs-extra');
 const ow = require('ow');
 const path = require('path');
+const log = require('apify-shared/log');
 
 /**
  * This is what API returns in the x-apify-pagination-limit
@@ -39,6 +40,7 @@ class DatasetClient {
      */
     async get() {
         try {
+            this._checkIfDatasetIsEmpty();
             this._ensureItemCount();
             const stats = await fs.stat(this.storeDir);
             // The platform treats writes as access, but filesystem does not,
@@ -190,6 +192,22 @@ class DatasetClient {
             this.itemCount = Number(lastFileName);
         } else {
             this.itemCount = 0;
+        }
+    }
+
+    /**
+     * @private
+     */
+    _checkIfDatasetIsEmpty() {
+        try {
+            const files = fs.readdirSync(this.storeDir);
+            if (files.length) {
+                log.warning(`The following dataset directory contains a previous state: ${this.storeDir}`
+                    + '\n      If you did not intend to persist this dataset state - '
+                    + 'please clear the directory and re-start the actor.');
+            }
+        } catch (err) {
+            if (err.code !== 'ENOENT') throw err;
         }
     }
 

@@ -1,6 +1,7 @@
 const fs = require('fs-extra');
 const ow = require('ow');
 const path = require('path');
+const log = require('apify-shared/log');
 const RequestQueueEmulator = require('../emulators/request_queue_emulator');
 const { purgeNullsFromObject, uniqueKeyToRequestId } = require('../utils');
 
@@ -81,6 +82,7 @@ class RequestQueueClient {
 
     async get() {
         try {
+            this._checkIfRequestQueueIsEmpty();
             this._getEmulator().updateAccessedAtById(this.id);
             const queue = this._getEmulator().selectById(this.id);
             queue.id = queue.name;
@@ -204,6 +206,22 @@ class RequestQueueClient {
     async deleteRequest() {
         // TODO Deletion is done, but we also need to update request counts in a transaction.
         throw new Error('This method is not implemented in @apify/storage-local yet.');
+    }
+
+    /**
+     * @private
+     */
+    _checkIfRequestQueueIsEmpty() {
+        try {
+            const files = fs.readdirSync(this.queueDir);
+            if (files.length) {
+                log.warning(`The following request queue directory contains a previous state: ${this.queueDir}`
+                    + '\n      If you did not intend to persist this request queue state - '
+                    + 'please clear the directory and re-start the actor.');
+            }
+        } catch (err) {
+            if (err.code !== 'ENOENT') throw err;
+        }
     }
 
     /**
