@@ -4,8 +4,6 @@ const ow = require('ow');
 const path = require('path');
 const stream = require('stream');
 const util = require('util');
-const log = require('apify-shared/log');
-const { KEY_VALUE_STORE_KEYS } = require('apify-shared/consts');
 const { isStream, isBuffer } = require('../utils');
 const { maybeParseBody } = require('../body_parser');
 const { DEFAULT_API_PARAM_LIMIT } = require('../consts');
@@ -43,7 +41,6 @@ class KeyValueStoreClient {
 
     async get() {
         try {
-            this._checkIfKeyValueStoreIsEmpty();
             const stats = await fs.stat(this.storeDir);
             // The platform treats writes as access, but filesystem does not,
             // so if the modification time is more recent, use that.
@@ -273,23 +270,6 @@ class KeyValueStoreClient {
             } else {
                 throw new Error(`Error deleting file '${key}' in directory '${this.storeDir}'.\nCause: ${err.message}`);
             }
-        }
-    }
-
-    /**
-     * @private
-     */
-    _checkIfKeyValueStoreIsEmpty() {
-        try {
-            const files = fs.readdirSync(this.storeDir)
-                .filter((file) => !RegExp(KEY_VALUE_STORE_KEYS.INPUT).test(file));
-            if (files.length) {
-                log.warning(`The following key-value store directory contains a previous state: ${this.storeDir}`
-                    + '\n      If you did not intend to persist this key-value store state - '
-                    + 'please clear the directory (except INPUT.json file) and re-start the actor.');
-            }
-        } catch (err) {
-            if (err.code !== 'ENOENT') throw err;
         }
     }
 
