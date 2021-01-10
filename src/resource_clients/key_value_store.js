@@ -26,7 +26,7 @@ const streamFinished = util.promisify(stream.finished);
 class KeyValueStoreClient {
     /**
      * @param {object} options
-     * @param {string} options.id
+     * @param {string} options.name
      * @param {string} options.storageDir
      */
     constructor(options) {

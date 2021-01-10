@@ -43,6 +43,14 @@ class ApifyStorageLocal {
         this.datasetDir = path.resolve(storageDir, STORAGE_NAMES.DATASETS);
         this.dbConnections = databaseConnectionCache;
 
+        /**
+         * DatasetClient keeps internal state: itemCount
+         * We need to keep a single client instance not to
+         * have different numbers across parallel clients.
+         * @type {Map<string, DatasetClient>}
+         */
+        this.datasetClientCache = new Map();
+
         // To prevent directories from being created immediately when
         // an ApifyClient instance is constructed, we create them lazily.
         this.isRequestQueueDirInitialized = false;
@@ -67,10 +75,14 @@ class ApifyStorageLocal {
     dataset(id) {
         ow(id, ow.string);
         this._ensureDatasetDir();
-        return new DatasetClient({
-            name: id,
-            storageDir: this.datasetDir,
-        });
+        let client = this.datasetClientCache.get(id);
+        if (!client) {
+            client = new DatasetClient({
+                name: id,
+                storageDir: this.datasetDir,
+            });
+        }
+        return client;
     }
 
     /**
@@ -132,6 +144,7 @@ class ApifyStorageLocal {
     _ensureDatasetDir() {
         if (!this.isDatasetDirInitialized) {
             fs.ensureDirSync(this.datasetDir);
+            this.isDatasetDirInitialized = true;
         }
     }
 
@@ -141,6 +154,7 @@ class ApifyStorageLocal {
     _ensureKeyValueStoreDir() {
         if (!this.isKeyValueStoreDirInitialized) {
             fs.ensureDirSync(this.keyValueStoreDir);
+            this.isKeyValueStoreDirInitialized = true;
         }
     }
 
@@ -150,6 +164,7 @@ class ApifyStorageLocal {
     _ensureRequestQueueDir() {
         if (!this.isRequestQueueDirInitialized) {
             fs.ensureDirSync(this.requestQueueDir);
+            this.isRequestQueueDirInitialized = true;
         }
     }
 }
