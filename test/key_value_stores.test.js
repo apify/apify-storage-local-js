@@ -347,6 +347,14 @@ describe('listKeys', () => {
         expect(items).toEqual(exclusiveItems);
     });
 
+    test('correctly sets isTruncated', async () => {
+        const records = createRecords(store);
+        let list = await storageLocal.keyValueStore(store.name).listKeys();
+        expect(list.isTruncated).toBe(false);
+        list = await storageLocal.keyValueStore(store.name).listKeys({ limit: records.length - 1 });
+        expect(list.isTruncated).toBe(true);
+    });
+
     describe('throws', () => {
         test('when store does not exist', async () => {
             const id = 'non-existent';

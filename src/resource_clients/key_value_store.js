@@ -88,13 +88,11 @@ class KeyValueStoreClient {
         ow(options, ow.object.exactShape({
             limit: ow.optional.number.greaterThan(0),
             exclusiveStartKey: ow.optional.string,
-            desc: ow.optional.boolean,
         }));
 
         const {
             limit = DEFAULT_API_PARAM_LIMIT,
             exclusiveStartKey,
-            desc,
         } = options;
 
         let files;
@@ -107,8 +105,6 @@ class KeyValueStoreClient {
                 throw new Error(`Error listing files in directory '${this.storeDir}'.\nCause: ${err.message}`);
             }
         }
-
-        if (desc) files.reverse();
 
         const items = [];
         for (const file of files) {
@@ -150,7 +146,7 @@ class KeyValueStoreClient {
             count: items.length,
             limit,
             exclusiveStartKey,
-            isTruncated: !nextExclusiveStartKey,
+            isTruncated: !isLastSelectedItemAbsolutelyLast,
             nextExclusiveStartKey,
             items: limitedItems,
         };
