@@ -185,6 +185,26 @@ describe('pushItems', () => {
         }
     });
 
+    test('adds JSON array as individual items', async () => {
+        const items = [];
+        for (let i = 1; i <= 20; i++) {
+            const item = numToItem(startCount + i);
+            items.push(item);
+        }
+
+        const jsonItems = JSON.stringify(items);
+
+        await storageLocal.dataset(datasetName).pushItems(jsonItems);
+        expect(counter.items(datasetName)).toBe(startCount + 20);
+
+        for (const item of items) {
+            const itemPath = path.join(datasetNameToDir(datasetName), item.filename);
+            const savedJson = await fs.readFile(itemPath, 'utf8');
+            const savedItem = JSON.parse(savedJson);
+            expect(savedItem).toEqual(item);
+        }
+    });
+
     describe('throws', () => {
         test('when dataset does not exist', async () => {
             const id = 'non-existent';
@@ -193,6 +213,21 @@ describe('pushItems', () => {
                 throw new Error('wrong-error');
             } catch (err) {
                 expect(err.message).toBe(`Dataset with id: ${id} does not exist.`);
+            }
+        });
+
+        test('when individual items are arrays', async () => {
+            const datasetName = 'first';
+            const arrayOfArrays = [
+                { foo: 'bar' },
+                [{ one: 1 }, { two: 2 }],
+            ];
+
+            expect.hasAssertions();
+            try {
+                await storageLocal.dataset(datasetName).pushItems(arrayOfArrays);
+            } catch (err) {
+                expect(err.message).toMatch('Each dataset item can only be a single JSON object, not an array. Received:');
             }
         });
     });
