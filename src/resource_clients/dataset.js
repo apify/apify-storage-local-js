@@ -19,7 +19,7 @@ const LOCAL_FILENAME_DIGITS = 9;
 class DatasetClient {
     /**
      * @param {object} options
-     * @param {string} options.id
+     * @param {string} options.name
      * @param {string} options.storageDir
      */
     constructor(options) {
@@ -31,7 +31,6 @@ class DatasetClient {
         this.name = name;
         this.storeDir = path.join(storageDir, name);
         this.itemCount = undefined;
-        this.updatingTimestamps = false;
     }
 
     /**
@@ -87,9 +86,10 @@ class DatasetClient {
 
     async delete() {
         await fs.remove(this.storeDir);
+        this.itemCount = undefined;
     }
 
-    async export() {
+    async downloadItems() {
         throw new Error('This method is not implemented in @apify/storage-local yet.');
     }
 
@@ -142,7 +142,7 @@ class DatasetClient {
     }
 
     /**
-     * @param {Object|string|Object[]|string[]}items
+     * @param {Object|string|Object[]|string[]} items
      * @return {Promise<void>}
      */
     async pushItems(items) {
@@ -153,11 +153,14 @@ class DatasetClient {
             ow.array.ofType(ow.any(ow.object, ow.string)),
         ));
 
-        if (!Array.isArray(items)) items = [items];
+        items = this._normalizeItems(items);
         const promises = items.map((item) => {
             this.itemCount++;
 
-            if (typeof item !== 'string') item = JSON.stringify(item, null, 2);
+            // We normalized the items to objects and now stringify them back to JSON,
+            // because we needed to inspect the contents of the strings. They could
+            // be JSON arrays which we need to split into individual items.
+            item = JSON.stringify(item, null, 2);
             const filePath = path.join(this.storeDir, this._getItemFileName(this.itemCount));
 
             return fs.writeFile(filePath, item);
@@ -165,6 +168,44 @@ class DatasetClient {
 
         await Promise.all(promises);
         this._updateTimestamps({ mtime: true });
+    }
+
+    /**
+     * To emulate API and split arrays of items into individual dataset items,
+     * we need to normalize the input items - which can be strings, objects
+     * or arrays of those - into objects, so that we can save them one by one
+     * later. We could potentially do this directly with strings, but let's
+     * not optimize prematurely.
+     *
+     * @param {Object|string|Object[]|string[]} items
+     * @return {object[]}
+     * @private
+     */
+    _normalizeItems(items) {
+        if (typeof items === 'string') {
+            items = JSON.parse(items);
+        }
+
+        return Array.isArray(items)
+            ? items.map(this._normalizeItem)
+            : [this._normalizeItem(items)];
+    }
+
+    /**
+     * @param {object|string} item
+     * @return {object}
+     * @private
+     */
+    _normalizeItem(item) {
+        if (typeof item === 'string') {
+            item = JSON.parse(item);
+        }
+
+        if (Array.isArray(item)) {
+            throw new Error(`Each dataset item can only be a single JSON object, not an array. Received: [${item.join(',\n')}]`);
+        }
+
+        return item;
     }
 
     /**
