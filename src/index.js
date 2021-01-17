@@ -1,7 +1,9 @@
 const fs = require('fs-extra');
 const ow = require('ow');
 const path = require('path');
-const { STORAGE_NAMES } = require('./consts');
+const log = require('apify-shared/log');
+const { KEY_VALUE_STORE_KEYS } = require('apify-shared/consts');
+const { STORAGE_NAMES, STORAGE_TYPES } = require('./consts');
 const DatabaseConnectionCache = require('./database_connection_cache');
 const DatasetClient = require('./resource_clients/dataset');
 const DatasetCollectionClient = require('./resource_clients/dataset_collection');
@@ -144,6 +146,7 @@ class ApifyStorageLocal {
     _ensureDatasetDir() {
         if (!this.isDatasetDirInitialized) {
             fs.ensureDirSync(this.datasetDir);
+            this._checkIfStorageIsEmpty(STORAGE_TYPES.DATASET, this.datasetDir);
             this.isDatasetDirInitialized = true;
         }
     }
@@ -154,6 +157,7 @@ class ApifyStorageLocal {
     _ensureKeyValueStoreDir() {
         if (!this.isKeyValueStoreDirInitialized) {
             fs.ensureDirSync(this.keyValueStoreDir);
+            this._checkIfStorageIsEmpty(STORAGE_TYPES.KEY_VALUE_STORE, this.keyValueStoreDir);
             this.isKeyValueStoreDirInitialized = true;
         }
     }
@@ -164,7 +168,36 @@ class ApifyStorageLocal {
     _ensureRequestQueueDir() {
         if (!this.isRequestQueueDirInitialized) {
             fs.ensureDirSync(this.requestQueueDir);
+            this._checkIfStorageIsEmpty(STORAGE_TYPES.REQUEST_QUEUE, this.requestQueueDir);
             this.isRequestQueueDirInitialized = true;
+        }
+    }
+
+    _checkIfStorageIsEmpty(storageType, storageDir) {
+        const dirsWithPreviousState = [];
+
+        const dirents = fs.readdirSync(storageDir, { withFileTypes: true });
+        for (const dirent of dirents) {
+            if (dirent.isDirectory()) {
+                const innerStorageDir = path.resolve(storageDir, dirent.name);
+
+                let innerDirents = fs.readdirSync(innerStorageDir).filter((fileName) => !(/(^|\/)\.[^/.]/g).test(fileName));
+                if (storageType === STORAGE_TYPES.KEY_VALUE_STORE) {
+                    innerDirents = innerDirents.filter((fileName) => !RegExp(KEY_VALUE_STORE_KEYS.INPUT).test(fileName));
+                }
+
+                if (innerDirents.length) {
+                    dirsWithPreviousState.push(innerStorageDir);
+                }
+            }
+        }
+
+        const dirsNo = dirsWithPreviousState.length;
+        if (dirsNo) {
+            log.warning(`The following ${storageType} director${dirsNo === 1 ? 'y' : 'ies'} contain${dirsNo === 1 ? 's' : ''} a previous state:`
+                + `\n      ${dirsWithPreviousState.join('\n      ')}`
+                + '\n      If you did not intend to persist the state - '
+                + `please clear the respective director${dirsNo === 1 ? 'y' : 'ies'} and re-start the actor.`);
         }
     }
 }
