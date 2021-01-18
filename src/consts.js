@@ -11,6 +11,16 @@ exports.REQUEST_ID_LENGTH = 15;
 exports.TIMESTAMP_SQL = "STRFTIME('%Y-%m-%dT%H:%M:%fZ', 'NOW')";
 
 /**
+ * Types of all emulated storages (currently used for warning messages only).
+ * @type {{REQUEST_QUEUE: string, KEY_VALUE_STORE: string, string, DATASET: string}}
+ */
+exports.STORAGE_TYPES = {
+    REQUEST_QUEUE: 'Request queue',
+    KEY_VALUE_STORE: 'Key-value store',
+    DATASET: 'Dataset',
+};
+
+/**
  * Names of all emulated storages.
  * @type {{REQUEST_QUEUES: string, KEY_VALUE_STORES: string, REQUEST_QUEUE_REQUESTS: string, DATASETS: string}}
  */
