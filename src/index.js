@@ -178,17 +178,16 @@ class ApifyStorageLocal {
 
         const dirents = fs.readdirSync(storageDir, { withFileTypes: true });
         for (const dirent of dirents) {
-            if (dirent.isDirectory()) {
-                const innerStorageDir = path.resolve(storageDir, dirent.name);
+            if (!dirent.isDirectory()) continue; // eslint-disable-line
 
-                let innerDirents = fs.readdirSync(innerStorageDir).filter((fileName) => !(/(^|\/)\.[^/.]/g).test(fileName));
-                if (storageType === STORAGE_TYPES.KEY_VALUE_STORE) {
-                    innerDirents = innerDirents.filter((fileName) => !RegExp(KEY_VALUE_STORE_KEYS.INPUT).test(fileName));
-                }
+            const innerStorageDir = path.resolve(storageDir, dirent.name);
+            let innerDirents = fs.readdirSync(innerStorageDir).filter((fileName) => !(/(^|\/)\.[^/.]/g).test(fileName));
+            if (storageType === STORAGE_TYPES.KEY_VALUE_STORE) {
+                innerDirents = innerDirents.filter((fileName) => !RegExp(KEY_VALUE_STORE_KEYS.INPUT).test(fileName));
+            }
 
-                if (innerDirents.length) {
-                    dirsWithPreviousState.push(innerStorageDir);
-                }
+            if (innerDirents.length) {
+                dirsWithPreviousState.push(innerStorageDir);
             }
         }
 
