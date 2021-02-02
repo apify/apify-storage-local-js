@@ -371,67 +371,55 @@ describe('listKeys', () => {
 describe('timestamps:', () => {
     const storeName = 'first';
     const testInitTimestamp = Date.now();
+    let client;
+    let spy;
+
+    beforeEach(() => {
+        jest.clearAllMocks();
+        client = storageLocal.keyValueStore(storeName);
+        spy = jest.spyOn(client, '_updateTimestamps');
+    });
 
     test('createdAt has a valid date', async () => {
         await wait10ms();
-        const { createdAt } = await storageLocal.keyValueStore(storeName).get();
+        const { createdAt } = await client.get();
         const createdAtTimestamp = createdAt.getTime();
         expect(createdAtTimestamp).toBeGreaterThan(testInitTimestamp);
         expect(createdAtTimestamp).toBeLessThan(Date.now());
     });
 
     test('get updated on record update', async () => {
-        const beforeUpdate = await storageLocal.keyValueStore(storeName).get();
         const record = numToRecord(1);
-        await storageLocal.keyValueStore(storeName).setRecord(stripRecord(record));
-        await wait10ms();
-        const afterUpdate = await storageLocal.keyValueStore(storeName).get();
-        expect(afterUpdate.modifiedAt.getTime()).toBeGreaterThan(beforeUpdate.modifiedAt.getTime());
-        expect(afterUpdate.accessedAt.getTime()).toBeGreaterThan(beforeUpdate.accessedAt.getTime());
+        await client.setRecord(stripRecord(record));
+        expect(spy).toHaveBeenCalledWith({ mtime: true });
     });
 
     test('get updated on record insert', async () => {
-        const beforeUpdate = await storageLocal.keyValueStore(storeName).get();
         const record = numToRecord(100);
-        await storageLocal.keyValueStore(storeName).setRecord(stripRecord(record));
-        await wait10ms();
-        const afterUpdate = await storageLocal.keyValueStore(storeName).get();
-        expect(afterUpdate.modifiedAt.getTime()).toBeGreaterThan(beforeUpdate.modifiedAt.getTime());
-        expect(afterUpdate.accessedAt.getTime()).toBeGreaterThan(beforeUpdate.accessedAt.getTime());
+        await client.setRecord(stripRecord(record));
+        expect(spy).toHaveBeenCalledWith({ mtime: true });
     });
 
     test('get updated on record delete', async () => {
-        const beforeUpdate = await storageLocal.keyValueStore(storeName).get();
         const record = numToRecord(1);
-        await storageLocal.keyValueStore(storeName).deleteRecord(record.key);
-        await wait10ms();
-        const afterUpdate = await storageLocal.keyValueStore(storeName).get();
-        expect(afterUpdate.modifiedAt.getTime()).toBeGreaterThan(beforeUpdate.modifiedAt.getTime());
-        expect(afterUpdate.accessedAt.getTime()).toBeGreaterThan(beforeUpdate.accessedAt.getTime());
+        await client.deleteRecord(record.key);
+        expect(spy).toHaveBeenCalledWith({ mtime: true });
     });
 
     test('getRecord updates accessedAt', async () => {
-        const beforeGet = await storageLocal.keyValueStore(storeName).get();
         const { key } = numToRecord(1);
-        await storageLocal.keyValueStore(storeName).getRecord(key);
-        await wait10ms();
-        const afterGet = await storageLocal.keyValueStore(storeName).get();
-        expect(beforeGet.modifiedAt.getTime()).toBe(afterGet.modifiedAt.getTime());
-        expect(afterGet.accessedAt.getTime()).toBeGreaterThan(beforeGet.accessedAt.getTime());
+        await client.getRecord(key);
+        expect(spy).toHaveBeenCalledWith();
     });
 
     test('listKeys updates accessedAt', async () => {
-        const beforeGet = await storageLocal.keyValueStore(storeName).get();
-        await storageLocal.keyValueStore(storeName).listKeys();
-        await wait10ms();
-        const afterGet = await storageLocal.keyValueStore(storeName).get();
-        expect(beforeGet.modifiedAt.getTime()).toBe(afterGet.modifiedAt.getTime());
-        expect(afterGet.accessedAt.getTime()).toBeGreaterThan(beforeGet.accessedAt.getTime());
+        await client.listKeys();
+        expect(spy).toHaveBeenCalledWith();
     });
 });
 
 async function wait10ms() {
-    return new Promise((r) => setTimeout(r, 10));
+    return new Promise((r) => setTimeout(r, 100));
 }
 
 function seed(keyValueStoresDir) {

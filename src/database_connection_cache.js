@@ -33,11 +33,15 @@ class DatabaseConnectionCache {
      */
     closeConnection(path) {
         const connection = this.connections.get(path);
-        if (connection) connection.close();
+        if (connection) {
+            connection.close();
+            this.connections.delete(path);
+        }
     }
 
     closeAllConnections() {
         this.connections.forEach((conn) => conn.close());
+        this.connections.clear();
     }
 
     /**
