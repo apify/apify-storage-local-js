@@ -1,5 +1,5 @@
 const fs = require('fs-extra');
-const ow = require('ow');
+const ow = require('ow').default;
 const path = require('path');
 const log = require('apify-shared/log');
 const { KEY_VALUE_STORE_KEYS } = require('apify-shared/consts');

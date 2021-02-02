@@ -1,6 +1,6 @@
 const fs = require('fs-extra');
 const mime = require('mime-types');
-const ow = require('ow');
+const ow = require('ow').default;
 const path = require('path');
 const stream = require('stream');
 const util = require('util');

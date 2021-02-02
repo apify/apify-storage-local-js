@@ -1,5 +1,5 @@
 const fs = require('fs-extra');
-const ow = require('ow');
+const ow = require('ow').default;
 const path = require('path');
 
 /**
