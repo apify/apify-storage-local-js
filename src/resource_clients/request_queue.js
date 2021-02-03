@@ -80,13 +80,17 @@ class RequestQueueClient {
     }
 
     async get() {
+        let queue;
         try {
             this._getEmulator().updateAccessedAtById(this.id);
-            const queue = this._getEmulator().selectById(this.id);
-            queue.id = queue.name;
-            return purgeNullsFromObject(queue);
+            queue = this._getEmulator().selectById(this.id);
         } catch (err) {
             if (err.code !== 'ENOENT') throw err;
+        }
+
+        if (queue) {
+            queue.id = queue.name;
+            return purgeNullsFromObject(queue);
         }
     }
 
