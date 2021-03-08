@@ -1,6 +1,6 @@
 {
     "name": "@apify/storage-local",
-    "version": "1.0.5",
+    "version": "1.0.6",
     "description": "Drop in replacement of Apify API with a local SQLite and filesystem implementation. Not all API features are supported.",
     "engines": {
         "node": ">=10.17.0"
@@ -37,8 +37,8 @@
         "lint:fix": "eslint ./src ./test --ext .js --fix"
     },
     "dependencies": {
-        "apify-shared": "^0.5.7",
-        "better-sqlite3-with-prebuilds": "^7.1.1",
+        "apify-shared": "^0.6.3",
+        "better-sqlite3-with-prebuilds": "^7.1.3",
         "content-type": "^1.0.4",
         "mime-types": "^2.1.27",
         "ow": "^0.23.0"
