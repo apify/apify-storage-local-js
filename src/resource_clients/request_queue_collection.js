@@ -14,15 +14,18 @@ class RequestQueueCollectionClient {
      * @param {object} options
      * @param {string} options.storageDir
      * @param {DatabaseConnectionCache} options.dbConnections
+     * @param {boolean} options.useWalMode
      */
     constructor(options) {
         const {
             storageDir,
             dbConnections,
+            useWalMode,
         } = options;
 
         this.storageDir = storageDir;
         this.dbConnections = dbConnections;
+        this.useWalMode = useWalMode;
     }
 
     async list() {
@@ -36,6 +39,7 @@ class RequestQueueCollectionClient {
         const emulator = new RequestQueueEmulator({
             queueDir,
             dbConnections: this.dbConnections,
+            useWalMode: this.useWalMode,
         });
         const queue = emulator.selectOrInsertByName(name);
         queue.id = queue.name;

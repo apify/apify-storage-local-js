@@ -12,14 +12,15 @@ class DatabaseConnectionCache {
 
     /**
      * @param {string} path
+     * @param {boolean} useWalMode
      * @param {object} [options]
      * @return {Database}
      */
-    openConnection(path, options) {
+    openConnection(path, useWalMode, options) {
         const existingConnection = this.connections.get(path);
         if (existingConnection) return existingConnection;
 
-        const newConnection = this._createConnection(path, options);
+        const newConnection = this._createConnection(path, useWalMode, options);
         this.connections.set(path, newConnection);
         return newConnection;
     }
@@ -68,11 +69,12 @@ class DatabaseConnectionCache {
 
     /**
      * @param {string} path
+     * @param {boolean} useWalMode
      * @param {object} options
      * @return {Database}
      * @private
      */
-    _createConnection(path, options) {
+    _createConnection(path, useWalMode, options) {
         let connection;
         try {
             connection = new Database(path, options);
@@ -85,7 +87,7 @@ class DatabaseConnectionCache {
         }
         // WAL mode should greatly improve performance
         // https://github.com/JoshuaWise/better-sqlite3/blob/master/docs/performance.md
-        connection.exec('PRAGMA journal_mode = WAL');
+        if (useWalMode) connection.exec('PRAGMA journal_mode = WAL');
         connection.exec('PRAGMA foreign_keys = ON');
         return connection;
     }

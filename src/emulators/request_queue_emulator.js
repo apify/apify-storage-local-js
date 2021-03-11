@@ -11,17 +11,20 @@ class RequestQueueEmulator {
      * @param {object} options
      * @param {string} options.queueDir
      * @param {DatabaseConnectionCache} options.dbConnections
+     * @param {boolean} options.useWalMode
      */
     constructor(options) {
         const {
             queueDir,
             dbConnections,
+            useWalMode,
         } = options;
 
         this.dbPath = path.join(queueDir, DATABASE_FILE_NAME);
         this.dbConnections = dbConnections;
+        this.useWalMode = useWalMode;
         try {
-            this.db = dbConnections.openConnection(this.dbPath);
+            this.db = dbConnections.openConnection(this.dbPath, this.useWalMode);
         } catch (err) {
             if (err.code !== 'ENOENT') throw err;
             const newError = new Error(`Request queue with id: ${path.parse(queueDir).name} does not exist.`);
