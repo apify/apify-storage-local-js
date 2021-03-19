@@ -45,8 +45,8 @@
         "prepublishOnly": "npm run build",
         "clean": "tsc -b src --clean",
         "test": "jest",
-        "lint": "eslint src tests --ext ts",
-        "lint:fix": "eslint src tests --ext ts --fix",
+        "lint": "eslint src test --ext js,mjs,ts",
+        "lint:fix": "eslint src test --ext js,mjs,ts --fix",
         "build:watch": "tsc -b src -w"
     },
     "dependencies": {
