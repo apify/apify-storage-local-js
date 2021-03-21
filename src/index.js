@@ -181,7 +181,9 @@ class ApifyStorageLocal {
             if (!dirent.isDirectory()) continue; // eslint-disable-line
 
             const innerStorageDir = path.resolve(storageDir, dirent.name);
+
             let innerDirents = fs.readdirSync(innerStorageDir).filter((fileName) => !(/(^|\/)\.[^/.]/g).test(fileName));
+
             if (storageType === STORAGE_TYPES.KEY_VALUE_STORE) {
                 innerDirents = innerDirents.filter((fileName) => !RegExp(KEY_VALUE_STORE_KEYS.INPUT).test(fileName));
             }

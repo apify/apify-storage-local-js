@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const ow = require('ow').default;
 const { REQUEST_ID_LENGTH } = require('./consts');
+
 /**
  * Removes all properties with a null value
  * from the provided object.
