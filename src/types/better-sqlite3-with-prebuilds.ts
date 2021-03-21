@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/ban-types, no-shadow */
+/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/ban-types, @typescript-eslint/no-namespace, no-shadow */
 
 // Licensed under MIT by DefinitelyTyped - Read more at https://github.com/DefinitelyTyped/DefinitelyTyped/blob/master/LICENSE
 
