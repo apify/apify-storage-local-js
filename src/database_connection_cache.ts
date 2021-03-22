@@ -1,13 +1,13 @@
-import Sqlite = require('better-sqlite3-with-prebuilds');
+import Sqlite, { Database, Options } from 'better-sqlite3-with-prebuilds';
 
 /**
  * SQLite prefers to have a single connection shared by
  * all users instead of opening and closing multiple connections.
  */
 export class DatabaseConnectionCache {
-    private connections = new Map<string, Sqlite.Database>();
+    private connections = new Map<string, Database>();
 
-    openConnection(path: string, options?: Sqlite.Options): Sqlite.Database {
+    openConnection(path: string, options?: Options): Database {
         const existingConnection = this.connections.get(path);
         if (existingConnection) return existingConnection;
 
@@ -56,7 +56,7 @@ export class DatabaseConnectionCache {
     //     });
     // }
 
-    private _createConnection(path: string, options?: Sqlite.Options): Sqlite.Database {
+    private _createConnection(path: string, options?: Options): Database {
         let connection;
         try {
             connection = new Sqlite(path, options);
