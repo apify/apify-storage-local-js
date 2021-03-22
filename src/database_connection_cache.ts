@@ -1,21 +1,13 @@
-const Database = require('better-sqlite3-with-prebuilds');
+import Sqlite, { Database, Options } from 'better-sqlite3-with-prebuilds';
 
 /**
  * SQLite prefers to have a single connection shared by
  * all users instead of opening and closing multiple connections.
  */
-class DatabaseConnectionCache {
-    constructor() {
-        /** @type {Map<string,Database>} */
-        this.connections = new Map();
-    }
+export class DatabaseConnectionCache {
+    private connections = new Map<string, Database>();
 
-    /**
-     * @param {string} path
-     * @param {object} [options]
-     * @return {Database}
-     */
-    openConnection(path, options) {
+    openConnection(path: string, options?: Options): Database {
         const existingConnection = this.connections.get(path);
         if (existingConnection) return existingConnection;
 
@@ -28,10 +20,8 @@ class DatabaseConnectionCache {
      * Closes database connection and keeps the data. Should
      * be called at the end of use to allow the process to exit
      * gracefully. No further database operations will be executed.
-     *
-     * @param {string} path
      */
-    closeConnection(path) {
+    closeConnection(path: string): void {
         const connection = this.connections.get(path);
         if (connection) {
             connection.close();
@@ -39,7 +29,7 @@ class DatabaseConnectionCache {
         }
     }
 
-    closeAllConnections() {
+    closeAllConnections(): void {
         this.connections.forEach((conn) => conn.close());
         this.connections.clear();
     }
@@ -66,16 +56,10 @@ class DatabaseConnectionCache {
     //     });
     // }
 
-    /**
-     * @param {string} path
-     * @param {object} options
-     * @return {Database}
-     * @private
-     */
-    _createConnection(path, options) {
+    private _createConnection(path: string, options?: Options): Database {
         let connection;
         try {
-            connection = new Database(path, options);
+            connection = new Sqlite(path, options);
         } catch (err) {
             if (/cannot open database because the directory does not exist/i.test(err.message)) {
                 err.code = 'ENOENT';
@@ -90,5 +74,3 @@ class DatabaseConnectionCache {
         return connection;
     }
 }
-
-module.exports = DatabaseConnectionCache;

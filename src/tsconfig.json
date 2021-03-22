@@ -8,5 +8,5 @@
         // Remove this once we finish migration from JS
         "allowJs": true
     },
-    "include": ["."]
+    "include": [".", "./**/*.d.ts"]
 }
