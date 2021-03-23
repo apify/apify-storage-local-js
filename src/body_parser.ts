@@ -1,7 +1,7 @@
 // THIS IS A COPY OF PARSING LOGIC FROM APIFY-CLIENT V1
 // ONCE THE V1 IS RELEASED, IT SHOULD BE REQUIRED FROM THERE
 
-import * as contentTypeParser from 'content-type';
+import contentTypeParser from 'content-type';
 
 const CONTENT_TYPE_JSON = 'application/json';
 const STRINGIFIABLE_CONTENT_TYPE_RXS = [
