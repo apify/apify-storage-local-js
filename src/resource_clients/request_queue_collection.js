@@ -1,7 +1,7 @@
 const fs = require('fs-extra');
 const ow = require('ow').default;
 const path = require('path');
-const RequestQueueEmulator = require('../emulators/request_queue_emulator');
+const { RequestQueueEmulator } = require('../emulators/request_queue_emulator');
 const { purgeNullsFromObject } = require('../utils');
 
 /**

@@ -1,8 +1,10 @@
-const fs = require('fs-extra');
-const ow = require('ow').default;
-const path = require('path');
-const RequestQueueEmulator = require('../emulators/request_queue_emulator');
-const { purgeNullsFromObject, uniqueKeyToRequestId } = require('../utils');
+import { join, dirname } from 'path';
+import ow from 'ow';
+import { move, remove } from 'fs-extra';
+import type { DatabaseConnectionCache } from '../database_connection_cache';
+import { RequestQueueEmulator } from '../emulators/request_queue_emulator';
+import { purgeNullsFromObject, uniqueKeyToRequestId } from '../utils';
+import type { QueueOperationInfo } from '../emulators/queue_operation_info';
 
 const requestShape = {
     url: ow.string,
@@ -12,51 +14,67 @@ const requestShape = {
     handledAt: ow.optional.any(ow.string.date, ow.date),
 };
 
-/**
- * @typedef {object} QueueHead
- * @property {number} limit Maximum number of items to be returned.
- * @property {Date} queueModifiedAt Date of the last modification of the queue.
- * @property {boolean} hadMultipleClients This is always false for local queue.
- * @property {Object[]} items Array of request-like objects.
- */
+export interface RequestBody {
+    id?: string;
+    url: string;
+    uniqueKey: string;
+    method?: string;
+    retryCount?: number;
+    handledAt?: Date | string;
+}
 
-/**
- * @typedef {object} RequestModel
- * @property {string} id,
- * @property {string} queueId,
- * @property {number|null} orderNo,
- * @property {string} url,
- * @property {string} uniqueKey,
- * @property {?string} method,
- * @property {?number} retryCount,
- * @property {string} json
- */
+export interface QueueHead {
+    limit: number;
+    queueModifiedAt: Date;
+    hadMultipleClients: boolean;
+    items: unknown[];
+}
 
-/**
- * Request queue client.
- */
-class RequestQueueClient {
+export interface RequestModel {
+    id: string;
+    queueId: string;
+    orderNo: number | null;
+    url: string;
+    uniqueKey: string;
+    method?: string;
+    retryCount?: number;
+    json: string;
+}
+
+export interface RequestQueueClientOptions {
+    name: string;
+    storageDir: string;
+    dbConnections: DatabaseConnectionCache;
+}
+
+export interface ListOptions {
     /**
-     * @param {object} options
-     * @param {string} options.name
-     * @param {string} options.storageDir
-     * @param {DatabaseConnectionCache} options.dbConnections
+     * @default 100
      */
-    constructor(options) {
-        const {
-            name,
-            storageDir,
-            dbConnections,
-        } = options;
+    limit?: number;
+}
 
-        // Since queues are represented by folders,
-        // each DB only has one queue with ID 1.
-        this.id = 1;
+export interface RequestOptions {
+    forefront?: boolean;
+}
 
+export class RequestQueueClient {
+    // Since queues are represented by folders,
+    // each DB only has one queue with ID 1.
+    id = '1';
+
+    name: string;
+
+    dbConnections: DatabaseConnectionCache;
+
+    queueDir: string;
+
+    private emulator!: RequestQueueEmulator;
+
+    constructor({ dbConnections, name, storageDir }: RequestQueueClientOptions) {
         this.name = name;
         this.dbConnections = dbConnections;
-
-        this.queueDir = path.join(storageDir, name);
+        this.queueDir = join(storageDir, name);
     }
 
     /**
@@ -65,11 +83,8 @@ class RequestQueueClient {
      * lazily. The outcome is that an attempt to access a queue
      * that does not exist throws only at the access invocation,
      * which is in line with API client.
-     *
-     * @return {RequestQueueEmulator}
-     * @private
      */
-    _getEmulator() {
+    private _getEmulator() {
         if (!this.emulator) {
             this.emulator = new RequestQueueEmulator({
                 queueDir: this.queueDir,
@@ -79,11 +94,11 @@ class RequestQueueClient {
         return this.emulator;
     }
 
-    async get() {
+    async get(): Promise<Record<string, unknown> | undefined> {
         let queue;
         try {
             this._getEmulator().updateAccessedAtById(this.id);
-            queue = this._getEmulator().selectById(this.id);
+            queue = this._getEmulator().selectById(this.id) as Record<string, unknown>;
         } catch (err) {
             if (err.code !== 'ENOENT') throw err;
         }
@@ -92,23 +107,26 @@ class RequestQueueClient {
             queue.id = queue.name;
             return purgeNullsFromObject(queue);
         }
+
+        return undefined;
     }
 
-    async update(newFields) {
+    async update(newFields: { name?: string; }): Promise<Record<string, unknown> | undefined> {
         // The validation is intentionally loose to prevent issues
         // when swapping to a remote queue in production.
         ow(newFields, ow.object.partialShape({
             name: ow.optional.string.nonEmpty,
         }));
+
         if (!newFields.name) return;
 
-        const newPath = path.join(path.dirname(this.queueDir), newFields.name);
+        const newPath = join(dirname(this.queueDir), newFields.name);
 
         // To prevent chaos, we close the database connection before moving the folder.
         this._getEmulator().disconnect();
 
         try {
-            await fs.move(this.queueDir, newPath);
+            await move(this.queueDir, newPath);
         } catch (err) {
             if (/dest already exists/.test(err.message)) {
                 throw new Error('Request queue name is not unique.');
@@ -120,33 +138,29 @@ class RequestQueueClient {
 
         this._getEmulator().updateNameById(this.id, newFields.name);
         this._getEmulator().updateModifiedAtById(this.id);
-        const queue = this._getEmulator().selectById(this.id);
+        const queue = this._getEmulator().selectById(this.id) as Record<string, unknown>;
         queue.id = queue.name;
         return purgeNullsFromObject(queue);
     }
 
-    async delete() {
+    async delete(): Promise<void> {
         this._getEmulator().disconnect();
 
-        await fs.remove(this.queueDir);
+        await remove(this.queueDir);
     }
 
-    /**
-     * @param {object} options
-     * @param {number} [options.limit=100]
-     * @return {Promise<QueueHead>}
-     */
-    async listHead(options = {}) {
+    async listHead(options: ListOptions = {}): Promise<QueueHead> {
         ow(options, ow.object.exactShape({
             limit: ow.optional.number,
         }));
+
         const {
             limit = 100,
         } = options;
 
         this._getEmulator().updateAccessedAtById(this.id);
         const requestJsons = this._getEmulator().selectRequestJsonsByQueueIdWithLimit(this.id, limit);
-        const queueModifiedAt = this._getEmulator().selectModifiedAtById(this.id);
+        const queueModifiedAt = this._getEmulator().selectModifiedAtById(this.id) as Date;
         return {
             limit,
             queueModifiedAt,
@@ -155,17 +169,12 @@ class RequestQueueClient {
         };
     }
 
-    /**
-     * @param {object} request
-     * @param {object} [options]
-     * @param {boolean} [options.forefront]
-     * @returns {Promise<QueueOperationInfo>}
-     */
-    async addRequest(request, options = {}) {
+    async addRequest(request: RequestModel, options: RequestOptions = {}): Promise<QueueOperationInfo> {
         ow(request, ow.object.partialShape({
             id: ow.undefined,
             ...requestShape,
         }));
+
         ow(options, ow.object.exactShape({
             forefront: ow.optional.boolean,
         }));
@@ -174,29 +183,19 @@ class RequestQueueClient {
         return this._getEmulator().addRequest(requestModel);
     }
 
-    /**
-     * @param {string} id
-     * @returns {Promise<?object>}
-     */
-    async getRequest(id) {
+    async getRequest(id: string): Promise<Record<string, unknown> | undefined> {
         ow(id, ow.string);
         this._getEmulator().updateAccessedAtById(this.id);
         const json = this._getEmulator().selectRequestJsonByIdAndQueueId(id, this.id);
         return this._jsonToRequest(json);
     }
 
-    /**
-     * @param {object} request
-     * @param {string} request.id
-     * @param {object} [options]
-     * @param {boolean} [options.forefront]
-     * @returns {Promise<QueueOperationInfo>}
-     */
-    async updateRequest(request, options = {}) {
+    async updateRequest(request: RequestModel, options: RequestOptions = {}): Promise<QueueOperationInfo> {
         ow(request, ow.object.partialShape({
             id: ow.string,
             ...requestShape,
         }));
+
         ow(options, ow.object.exactShape({
             forefront: ow.optional.boolean,
         }));
@@ -205,18 +204,12 @@ class RequestQueueClient {
         return this._getEmulator().updateRequest(requestModel);
     }
 
-    async deleteRequest() {
+    async deleteRequest(): Promise<never> {
         // TODO Deletion is done, but we also need to update request counts in a transaction.
         throw new Error('This method is not implemented in @apify/storage-local yet.');
     }
 
-    /**
-     * @param {object} request
-     * @param {boolean} forefront
-     * @returns {RequestModel}
-     * @private
-     */
-    _createRequestModel(request, forefront) {
+    private _createRequestModel(request: RequestBody, forefront?: boolean): RequestModel {
         const orderNo = this._calculateOrderNo(request, forefront);
         const id = uniqueKeyToRequestId(request.uniqueKey);
         if (request.id && id !== request.id) throw new Error('Request ID does not match its uniqueKey.');
@@ -237,23 +230,16 @@ class RequestQueueClient {
      * A partial index on the requests table ensures
      * that NULL values are not returned when querying
      * for queue head.
-     *
-     * @param {object} request
-     * @param {boolean} forefront
-     * @returns {null|number}
-     * @private
      */
-    _calculateOrderNo(request, forefront) {
+    private _calculateOrderNo(request: RequestBody, forefront?: boolean) {
         if (request.handledAt) return null;
         const timestamp = Date.now();
         return forefront ? -timestamp : timestamp;
     }
 
-    _jsonToRequest(requestJson) {
+    private _jsonToRequest(requestJson: string) {
         if (!requestJson) return;
         const request = JSON.parse(requestJson);
         return purgeNullsFromObject(request);
     }
 }
-
-module.exports = RequestQueueClient;
