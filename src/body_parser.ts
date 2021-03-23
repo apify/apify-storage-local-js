@@ -1,7 +1,7 @@
 // THIS IS A COPY OF PARSING LOGIC FROM APIFY-CLIENT V1
 // ONCE THE V1 IS RELEASED, IT SHOULD BE REQUIRED FROM THERE
 
-const contentTypeParser = require('content-type');
+import * as contentTypeParser from 'content-type';
 
 const CONTENT_TYPE_JSON = 'application/json';
 const STRINGIFIABLE_CONTENT_TYPE_RXS = [
@@ -19,19 +19,15 @@ const STRINGIFIABLE_CONTENT_TYPE_RXS = [
  *
  * If the header includes a charset, the body will be stringified only
  * if the charset represents a known encoding to Node.js or Browser.
- *
- * @param {Buffer|ArrayBuffer} body
- * @param {string} contentTypeHeader
- * @return {string|Object|Buffer|ArrayBuffer}
  */
-exports.maybeParseBody = (body, contentTypeHeader) => {
-    let contentType;
-    let charset;
+export function maybeParseBody(body: Buffer | ArrayBuffer, contentTypeHeader: string): string | Buffer | ArrayBuffer | Record<string, unknown> {
+    let contentType: string;
+    let charset: BufferEncoding;
     try {
         const result = contentTypeParser.parse(contentTypeHeader);
         contentType = result.type;
-        charset = result.parameters.charset;
-    } catch (err) {
+        charset = result.parameters.charset as BufferEncoding;
+    } catch {
         // can't parse, keep original body
         return body;
     }
@@ -46,12 +42,7 @@ exports.maybeParseBody = (body, contentTypeHeader) => {
         : dataString;
 };
 
-/**
- * @param {Buffer|ArrayBuffer} buffer
- * @param {string} encoding
- * @return {string}
- */
-function isomorphicBufferToString(buffer, encoding) {
+function isomorphicBufferToString(buffer: Buffer | ArrayBuffer, encoding: BufferEncoding): string {
     if (buffer.constructor.name !== ArrayBuffer.name) {
         return buffer.toString(encoding);
     }
@@ -61,29 +52,16 @@ function isomorphicBufferToString(buffer, encoding) {
     return utf8decoder.decode(new Uint8Array(buffer));
 }
 
-/**
- * @param {string} charset
- * @return {boolean}
- */
-function isCharsetStringifiable(charset) {
+function isCharsetStringifiable(charset: string): charset is BufferEncoding {
     if (!charset) return true; // hope that it's utf-8
     return Buffer.isEncoding(charset);
 }
 
-/**
- * @param {string} contentType
- * @return {boolean}
- */
-function isContentTypeStringifiable(contentType) {
+function isContentTypeStringifiable(contentType: string): boolean {
     if (!contentType) return false; // keep buffer
     return STRINGIFIABLE_CONTENT_TYPE_RXS.some((rx) => rx.test(contentType));
 }
 
-/**
- * @param {string} contentType
- * @param {string} charset
- * @return {boolean}
- */
-function areDataStringifiable(contentType, charset) {
+function areDataStringifiable(contentType: string, charset: string): boolean {
     return isContentTypeStringifiable(contentType) && isCharsetStringifiable(charset);
 }

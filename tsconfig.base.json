@@ -12,7 +12,7 @@
         "importHelpers": true,
         "importsNotUsedAsValues": "error",
         "incremental": true,
-        "lib": ["esnext"],
+        "lib": ["esnext", "dom"],
         "module": "CommonJS",
         "moduleResolution": "Node",
         "newLine": "lf",
