@@ -1,45 +1,65 @@
-const fs = require('fs-extra');
-const ow = require('ow').default;
-const path = require('path');
+import { move, remove, stat, readdirSync, readFile, utimes, writeFile } from 'fs-extra';
+import ow from 'ow';
+import { join, dirname, parse } from 'path';
+import type { DatasetCollectionData } from './dataset_collection';
 
 /**
  * This is what API returns in the x-apify-pagination-limit
  * header when no limit query parameter is used.
- * @type {number}
  */
-const LIST_ITEMS_LIMIT = 999999999999;
+const LIST_ITEMS_LIMIT = 999_999_999_999;
 
 /**
  * Number of characters of the dataset item file names.
  * E.g.: 000000019.json - 9 digits
- * @type {number}
  */
 const LOCAL_FILENAME_DIGITS = 9;
 
-class DatasetClient {
-    /**
-     * @param {object} options
-     * @param {string} options.name
-     * @param {string} options.storageDir
-     */
-    constructor(options) {
-        const {
-            name,
-            storageDir,
-        } = options;
+export interface DatasetClientOptions {
+    name: string;
+    storageDir: string;
+}
 
+export interface Dataset extends DatasetCollectionData {
+    itemCount: number;
+}
+
+type DataTypes = string | string[] | Record<string, unknown> | Record<string, unknown>[];
+
+export interface DatasetClientUpdateOptions {
+    name?: string;
+}
+
+export interface DatasetClientListOptions {
+    desc?: boolean;
+    limit?: number;
+    offset?: number;
+}
+
+export interface PaginationList {
+    items?: Record<string, unknown>[];
+    total: number;
+    offset: number;
+    count: number;
+    limit?: number;
+}
+
+export class DatasetClient {
+    name: string;
+
+    storeDir: string;
+
+    itemCount?: number = undefined;
+
+    constructor({ name, storageDir } : DatasetClientOptions) {
         this.name = name;
-        this.storeDir = path.join(storageDir, name);
-        this.itemCount = undefined;
+        this.storeDir = join(storageDir, name);
     }
 
-    /**
-     * @return {Promise<Dataset>}
-     */
-    async get() {
+    async get(): Promise<Dataset | undefined> {
         try {
             this._ensureItemCount();
-            const stats = await fs.stat(this.storeDir);
+            const stats = await stat(this.storeDir);
             // The platform treats writes as access, but filesystem does not,
             // so if the modification time is more recent, use that.
             const accessedTimestamp = Math.max(stats.mtime.getTime(), stats.atime.getTime());
@@ -49,19 +69,15 @@ class DatasetClient {
                 createdAt: stats.birthtime,
                 modifiedAt: stats.mtime,
                 accessedAt: new Date(accessedTimestamp),
-                itemCount: this.itemCount,
+                itemCount: this.itemCount!,
             };
         } catch (err) {
             if (err.code !== 'ENOENT') throw err;
+            return undefined;
         }
     }
 
-    /**
-     * @param {object} newFields
-     * @param {string} [newFields.name]
-     * @return {Promise<void>}
-     */
-    async update(newFields) {
+    async update(newFields: DatasetClientUpdateOptions): Promise<void> {
         // The validation is intentionally loose to prevent issues
         // when swapping to a remote storage in production.
         ow(newFields, ow.object.partialShape({
@@ -69,9 +85,9 @@ class DatasetClient {
         }));
         if (!newFields.name) return;
 
-        const newPath = path.join(path.dirname(this.storeDir), newFields.name);
+        const newPath = join(dirname(this.storeDir), newFields.name);
         try {
-            await fs.move(this.storeDir, newPath);
+            await move(this.storeDir, newPath);
         } catch (err) {
             if (/dest already exists/.test(err.message)) {
                 throw new Error('Dataset name is not unique.');
@@ -84,23 +100,17 @@ class DatasetClient {
         this.name = newFields.name;
     }
 
-    async delete() {
-        await fs.remove(this.storeDir);
+    async delete(): Promise<void> {
+        await remove(this.storeDir);
+
         this.itemCount = undefined;
     }
 
-    async downloadItems() {
+    async downloadItems(): Promise<never> {
         throw new Error('This method is not implemented in @apify/storage-local yet.');
     }
 
-    /**
-     * @param {object} [options]
-     * @param {boolean} [options.desc]
-     * @param {number} [options.limit]
-     * @param {number} [options.offset]
-     * @return {Promise<PaginationList>}
-     */
-    async listItems(options = {}) {
+    async listItems(options: DatasetClientListOptions = {}): Promise<PaginationList> {
         this._ensureItemCount();
         // The extra code is to enable a custom validation message.
         ow(options, ow.object.validate((value) => ({
@@ -134,18 +144,14 @@ class DatasetClient {
         this._updateTimestamps();
         return {
             items: desc ? items.reverse() : items,
-            total: this.itemCount,
+            total: this.itemCount!,
             offset,
             count: items.length,
             limit,
         };
     }
 
-    /**
-     * @param {Object|string|Object[]|string[]} items
-     * @return {Promise<void>}
-     */
-    async pushItems(items) {
+    async pushItems(items: DataTypes): Promise<void> {
         this._ensureItemCount();
         ow(items, ow.any(
             ow.object,
@@ -155,15 +161,15 @@ class DatasetClient {
 
         items = this._normalizeItems(items);
         const promises = items.map((item) => {
-            this.itemCount++;
+            this.itemCount!++;
 
             // We normalized the items to objects and now stringify them back to JSON,
             // because we needed to inspect the contents of the strings. They could
             // be JSON arrays which we need to split into individual items.
-            item = JSON.stringify(item, null, 2);
-            const filePath = path.join(this.storeDir, this._getItemFileName(this.itemCount));
+            const finalItem = JSON.stringify(item, null, 2);
+            const filePath = join(this.storeDir, this._getItemFileName(this.itemCount!));
 
-            return fs.writeFile(filePath, item);
+            return writeFile(filePath, finalItem);
         });
 
         await Promise.all(promises);
@@ -176,12 +182,8 @@ class DatasetClient {
      * or arrays of those - into objects, so that we can save them one by one
      * later. We could potentially do this directly with strings, but let's
      * not optimize prematurely.
-     *
-     * @param {Object|string|Object[]|string[]} items
-     * @return {object[]}
-     * @private
      */
-    _normalizeItems(items) {
+    private _normalizeItems(items: DataTypes): Record<string, unknown>[] {
         if (typeof items === 'string') {
             items = JSON.parse(items);
         }
@@ -191,14 +193,9 @@ class DatasetClient {
             : [this._normalizeItem(items)];
     }
 
-    /**
-     * @param {object|string} item
-     * @return {object}
-     * @private
-     */
-    _normalizeItem(item) {
+    private _normalizeItem(item: string | Record<string, unknown>) {
         if (typeof item === 'string') {
-            item = JSON.parse(item);
+            item = JSON.parse(item) as Record<string, unknown>;
         }
 
         if (Array.isArray(item)) {
@@ -208,15 +205,12 @@ class DatasetClient {
         return item;
     }
 
-    /**
-     * @private
-     */
-    _ensureItemCount() {
+    private _ensureItemCount() {
         if (typeof this.itemCount === 'number') return;
 
-        let files;
+        let files: string[];
         try {
-            files = fs.readdirSync(this.storeDir);
+            files = readdirSync(this.storeDir);
         } catch (err) {
             if (err.code === 'ENOENT') {
                 this._throw404();
@@ -226,84 +220,51 @@ class DatasetClient {
         }
 
         if (files.length) {
-            const lastFile = files.pop();
-            const lastFileName = path.parse(lastFile).name;
+            const lastFile = files.pop()!;
+            const lastFileName = parse(lastFile).name;
             this.itemCount = Number(lastFileName);
         } else {
             this.itemCount = 0;
         }
     }
 
-    /**
-     * @param {number} index
-     * @return {string}
-     * @private
-     */
-    _getItemFileName(index) {
-        const name = `${index}`.padStart(LOCAL_FILENAME_DIGITS, '0');
+    private _getItemFileName(index: number) {
+        const name = index.toString().padStart(LOCAL_FILENAME_DIGITS, '0');
         return `${name}.json`;
     }
 
-    /**
-     * @param {number} offset
-     * @param {number} limit
-     * @return {[number, number]}
-     * @private
-     */
-    _getStartAndEndIndexes(offset, limit = this.itemCount) {
+    private _getStartAndEndIndexes(offset: number, limit = this.itemCount!) {
         const start = offset + 1;
-        const end = Math.min(offset + limit, this.itemCount) + 1;
-        return [start, end];
+        const end = Math.min(offset + limit, this.itemCount!) + 1;
+        return [start, end] as const;
     }
 
-    /**
-     * @param {number} index
-     * @return {Promise<Object>}
-     * @private
-     */
-    async _readAndParseFile(index) {
-        const filePath = path.join(this.storeDir, this._getItemFileName(index));
+    private async _readAndParseFile(index: number): Promise<Record<string, unknown>> {
+        const filePath = join(this.storeDir, this._getItemFileName(index));
 
-        const json = await fs.readFile(filePath, 'utf8');
+        const json = await readFile(filePath, 'utf8');
         return JSON.parse(json);
     }
 
-    /**
-     * @private
-     */
-    _throw404() {
+    private _throw404(): never {
         const err = new Error(`Dataset with id: ${this.name} does not exist.`);
+        // TODO: cast as ErrorWithCode once #21 lands
+        // @ts-expect-error Adding fs-like code to the error
         err.code = 'ENOENT';
         throw err;
     }
 
-    /**
-     * @param {object} [options]
-     * @param {boolean} [options.mtime]
-     * @private
-     */
-    _updateTimestamps({ mtime } = {}) {
+    private _updateTimestamps({ mtime }: { mtime?: boolean; } = {}) {
         // It's throwing EINVAL on Windows. Not sure why,
         // so the function is a best effort only.
         const now = new Date();
         let promise;
         if (mtime) {
-            promise = fs.utimes(this.storeDir, now, now);
+            promise = utimes(this.storeDir, now, now);
         } else {
-            promise = fs.stat(this.storeDir)
-                .then((stats) => fs.utimes(this.storeDir, now, stats.mtime));
+            promise = stat(this.storeDir)
+                .then((stats) => utimes(this.storeDir, now, stats.mtime));
         }
         promise.catch(() => { /* we don't care that much if it sometimes fails */ });
     }
 }
-
-module.exports = DatasetClient;
-
-/**
- * @typedef {object} PaginationList
- * @property {object[]} items - List of returned objects
- * @property {number} total - Total number of objects
- * @property {number} offset - Number of objects that were skipped
- * @property {number} count - Number of returned objects
- * @property {number} [limit] - Requested limit
- */
