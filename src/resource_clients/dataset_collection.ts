@@ -15,7 +15,7 @@ export interface DatasetCollectionData {
 }
 
 /**
- * Key-value store collection client.
+ * Dataset collection client.
  */
 export class DatasetCollectionClient {
     storageDir: string;
