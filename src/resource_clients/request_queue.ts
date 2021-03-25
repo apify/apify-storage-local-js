@@ -160,7 +160,7 @@ export class RequestQueueClient {
 
         this._getEmulator().updateAccessedAtById(this.id);
         const requestJsons = this._getEmulator().selectRequestJsonsByQueueIdWithLimit(this.id, limit);
-        const queueModifiedAt = this._getEmulator().selectModifiedAtById(this.id) as Date;
+        const queueModifiedAt = new Date(this._getEmulator().selectModifiedAtById(this.id) as string);
         return {
             limit,
             queueModifiedAt,
