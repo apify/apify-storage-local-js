@@ -2,7 +2,7 @@ import { join, dirname } from 'path';
 import ow from 'ow';
 import { move, remove } from 'fs-extra';
 import type { DatabaseConnectionCache } from '../database_connection_cache';
-import { RequestQueueEmulator } from '../emulators/request_queue_emulator';
+import { RawQueueTableData, RequestQueueEmulator } from '../emulators/request_queue_emulator';
 import { purgeNullsFromObject, uniqueKeyToRequestId } from '../utils';
 import type { QueueOperationInfo } from '../emulators/queue_operation_info';
 
@@ -94,11 +94,11 @@ export class RequestQueueClient {
         return this.emulator;
     }
 
-    async get(): Promise<Record<string, unknown> | undefined> {
+    async get(): Promise<RawQueueTableData | undefined> {
         let queue;
         try {
             this._getEmulator().updateAccessedAtById(this.id);
-            queue = this._getEmulator().selectById(this.id) as Record<string, unknown>;
+            queue = this._getEmulator().selectById(this.id);
         } catch (err) {
             if (err.code !== 'ENOENT') throw err;
         }
@@ -111,7 +111,7 @@ export class RequestQueueClient {
         return undefined;
     }
 
-    async update(newFields: { name?: string; }): Promise<Record<string, unknown> | undefined> {
+    async update(newFields: { name?: string; }): Promise<RawQueueTableData | undefined> {
         // The validation is intentionally loose to prevent issues
         // when swapping to a remote queue in production.
         ow(newFields, ow.object.partialShape({
@@ -138,7 +138,7 @@ export class RequestQueueClient {
 
         this._getEmulator().updateNameById(this.id, newFields.name);
         this._getEmulator().updateModifiedAtById(this.id);
-        const queue = this._getEmulator().selectById(this.id) as Record<string, unknown>;
+        const queue = this._getEmulator().selectById(this.id);
         queue.id = queue.name;
         return purgeNullsFromObject(queue);
     }
@@ -160,7 +160,7 @@ export class RequestQueueClient {
 
         this._getEmulator().updateAccessedAtById(this.id);
         const requestJsons = this._getEmulator().selectRequestJsonsByQueueIdWithLimit(this.id, limit);
-        const queueModifiedAt = new Date(this._getEmulator().selectModifiedAtById(this.id) as string);
+        const queueModifiedAt = this._getEmulator().selectModifiedAtById(this.id);
         return {
             limit,
             queueModifiedAt,
