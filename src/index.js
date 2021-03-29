@@ -21,6 +21,9 @@ const databaseConnectionCache = new DatabaseConnectionCache();
  * @property {string} [storageDir='./apify_storage']
  *  Path to directory with storages. If there are no storages yet,
  *  appropriate sub-directories will be created in this directory.
+ * @property {boolean} [disableWalMode=false]
+ *  SQLite WAL mode (instead of a rollback journal) is used by default for request queues, however, in some file systems it could behave weirdly.
+ *  Setting this property to `true` will force the request queue database to use a rollback journal instead of WAL.
  */
 
 /**
@@ -33,10 +36,12 @@ class ApifyStorageLocal {
     constructor(options = {}) {
         ow(options, 'ApifyStorageLocalOptions', ow.optional.object.exactShape({
             storageDir: ow.optional.string,
+            disableWalMode: ow.optional.boolean,
         }));
 
         const {
             storageDir = './apify_storage',
+            disableWalMode = false,
         } = options;
 
         this.storageDir = storageDir;
@@ -44,6 +49,9 @@ class ApifyStorageLocal {
         this.keyValueStoreDir = path.resolve(storageDir, STORAGE_NAMES.KEY_VALUE_STORES);
         this.datasetDir = path.resolve(storageDir, STORAGE_NAMES.DATASETS);
         this.dbConnections = databaseConnectionCache;
+        this.disableWalMode = disableWalMode;
+
+        if (this.disableWalMode) this.dbConnections.disableWalMode();
 
         /**
          * DatasetClient keeps internal state: itemCount
