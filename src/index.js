@@ -10,7 +10,7 @@ const { DatasetCollectionClient } = require('./resource_clients/dataset_collecti
 const KeyValueStoreClient = require('./resource_clients/key_value_store');
 const KeyValueStoreCollectionClient = require('./resource_clients/key_value_store_collection');
 const { RequestQueueClient } = require('./resource_clients/request_queue');
-const RequestQueueCollectionClient = require('./resource_clients/request_queue_collection');
+const { RequestQueueCollectionClient } = require('./resource_clients/request_queue_collection');
 
 // Singleton cache to be shared across all ApifyStorageLocal instances
 // to make sure that multiple connections are not created to the same database.
