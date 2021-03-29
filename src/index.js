@@ -7,8 +7,8 @@ const { STORAGE_NAMES, STORAGE_TYPES } = require('./consts');
 const { DatabaseConnectionCache } = require('./database_connection_cache');
 const { DatasetClient } = require('./resource_clients/dataset');
 const { DatasetCollectionClient } = require('./resource_clients/dataset_collection');
-const KeyValueStoreClient = require('./resource_clients/key_value_store');
-const KeyValueStoreCollectionClient = require('./resource_clients/key_value_store_collection');
+const { KeyValueStoreClient } = require('./resource_clients/key_value_store');
+const { KeyValueStoreCollectionClient } = require('./resource_clients/key_value_store_collection');
 const RequestQueueClient = require('./resource_clients/request_queue');
 const RequestQueueCollectionClient = require('./resource_clients/request_queue_collection');
 
