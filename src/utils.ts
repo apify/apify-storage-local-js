@@ -6,7 +6,7 @@ import { REQUEST_ID_LENGTH } from './consts';
  * Removes all properties with a null value
  * from the provided object.
  */
-export function purgeNullsFromObject(object: unknown): unknown {
+export function purgeNullsFromObject<T extends Record<string, unknown>>(object: T): T {
     if (object && typeof object === 'object' && !Array.isArray(object)) {
         for (const [key, value] of Object.entries(object)) {
             if (value === null) Reflect.deleteProperty(object, key);
