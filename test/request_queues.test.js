@@ -3,7 +3,7 @@ const ow = require('ow');
 const path = require('path');
 const ApifyStorageLocal = require('../src/index');
 const { STORAGE_NAMES, DATABASE_FILE_NAME } = require('../src/consts');
-const RequestQueueEmulator = require('../src/emulators/request_queue_emulator');
+const { RequestQueueEmulator } = require('../src/emulators/request_queue_emulator');
 const { uniqueKeyToRequestId } = require('../src/utils');
 const { prepareTestDir, removeTestDir } = require('./_tools');
 
