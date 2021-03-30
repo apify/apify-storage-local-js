@@ -17,6 +17,28 @@ interface ErrorWithCode extends Error {
     code: string;
 }
 
+export interface RawQueueTableData {
+    id: string;
+    name: string;
+    createdAt: string;
+    modifiedAt: string;
+    accessedAt: string;
+    totalRequestCount: number;
+    handledRequestCount: number;
+    pendingRequestCount: number;
+}
+
+export interface RawRequestsTableData {
+    queueId: string;
+    id: string;
+    orderNo: number;
+    url: string;
+    uniqueKey: string;
+    method?: string | null;
+    retryCount: number;
+    json: string;
+}
+
 export class RequestQueueEmulator {
     dbPath: string;
 
@@ -93,7 +115,7 @@ export class RequestQueueEmulator {
         this.dbConnections.closeConnection(this.dbPath);
     }
 
-    selectById(id: string | number): unknown {
+    selectById(id: string | number): RawQueueTableData {
         if (!this._selectById) {
             this._selectById = this.db.prepare(`
                 SELECT *, CAST(id as TEXT) as id
@@ -114,7 +136,7 @@ export class RequestQueueEmulator {
         return this._deleteById.run(id);
     }
 
-    selectByName(name: string): unknown {
+    selectByName(name: string): RawQueueTableData {
         if (!this._selectByName) {
             this._selectByName = this.db.prepare(`
                 SELECT *, CAST(id as TEXT) as id
@@ -135,7 +157,7 @@ export class RequestQueueEmulator {
         return this._insertByName.run(name);
     }
 
-    selectOrInsertByName(name: string): unknown {
+    selectOrInsertByName(name: string): RawQueueTableData {
         if (!this._selectOrInsertTransaction) {
             this._selectOrInsertTransaction = this.db.transaction((n) => {
                 if (n) {
@@ -150,7 +172,7 @@ export class RequestQueueEmulator {
         return this._selectOrInsertTransaction(name);
     }
 
-    selectModifiedAtById(id: string | number): unknown {
+    selectModifiedAtById(id: string | number): string {
         if (!this._selectModifiedAtById) {
             this._selectModifiedAtById = this.db.prepare(`
                 SELECT modifiedAt FROM ${this.queueTableName}
@@ -279,7 +301,7 @@ export class RequestQueueEmulator {
         return this._deleteRequestById.run(id);
     }
 
-    addRequest<T = unknown>(requestModel: RequestModel): T {
+    addRequest(requestModel: RequestModel): QueueOperationInfo {
         if (!this._addRequestTransaction) {
             this._addRequestTransaction = this.db.transaction((model) => {
                 try {
@@ -306,7 +328,7 @@ export class RequestQueueEmulator {
         return this._addRequestTransaction(requestModel);
     }
 
-    updateRequest<T = unknown>(requestModel: RequestModel): T {
+    updateRequest(requestModel: RequestModel): QueueOperationInfo {
         if (!this._updateRequestTransaction) {
             this._updateRequestTransaction = this.db.transaction((model) => {
                 // First we need to check the existing request to be
