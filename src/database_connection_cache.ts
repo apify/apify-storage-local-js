@@ -7,7 +7,7 @@ import Sqlite, { Database, Options } from 'better-sqlite3-with-prebuilds';
 export class DatabaseConnectionCache {
     private connections = new Map<string, Database>();
 
-    private useWalMode = true;
+    private enableWalMode: boolean | undefined;
 
     openConnection(path: string, options?: Options): Database {
         const existingConnection = this.connections.get(path);
@@ -58,11 +58,11 @@ export class DatabaseConnectionCache {
     //     });
     // }
 
-    disableWalMode(): void {
+    setWalMode(enableWalMode: boolean): void {
         if (this.connections.size) {
-            throw new Error('Cannot disable WAL mode while there are open database connections');
+            throw new Error(`Cannot ${enableWalMode ? 'enable' : 'disable'} WAL mode while there are open database connections`);
         }
-        this.useWalMode = false;
+        this.enableWalMode = enableWalMode;
     }
 
     private _createConnection(path: string, options?: Options): Database {
@@ -78,7 +78,7 @@ export class DatabaseConnectionCache {
         }
         // WAL mode should greatly improve performance
         // https://github.com/JoshuaWise/better-sqlite3/blob/master/docs/performance.md
-        if (this.useWalMode) connection.exec('PRAGMA journal_mode = WAL');
+        if (this.enableWalMode) connection.exec('PRAGMA journal_mode = WAL');
         connection.exec('PRAGMA foreign_keys = ON');
         return connection;
     }
