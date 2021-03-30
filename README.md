@@ -6,3 +6,13 @@ replacement.
 
 [Apify SDK](https://sdk.apify.com) is the main consumer of this package. It allows the SDK
 to be used without access to the Apify Platform.
+
+## How to build from source
+
+If you are working on this module, or would like to contribute to it, and need to test your changes locally,
+here are the build steps to get this module up and running.
+
+1. Install dependencies via `npm i`
+2. Run the `build` script (`npm run build`)
+
+The compiled code will be found in the `dist` folder that gets created.
