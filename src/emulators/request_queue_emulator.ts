@@ -172,14 +172,14 @@ export class RequestQueueEmulator {
         return this._selectOrInsertTransaction(name);
     }
 
-    selectModifiedAtById(id: string | number): Date {
+    selectModifiedAtById(id: string | number): string {
         if (!this._selectModifiedAtById) {
             this._selectModifiedAtById = this.db.prepare(`
                 SELECT modifiedAt FROM ${this.queueTableName}
                 WHERE id = ?
             `).pluck();
         }
-        return new Date(this._selectModifiedAtById.get(id));
+        return this._selectModifiedAtById.get(id);
     }
 
     updateNameById(id: string | number, name: string): RunResult {
