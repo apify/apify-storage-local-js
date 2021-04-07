@@ -171,6 +171,21 @@ describe('setRecord', () => {
         expect(savedData).toEqual(value);
     });
 
+    test('setRecord() works with Readable streams', async () => {
+        const key = 'stream-test';
+        const contentType = 'application/octet-stream';
+        const rawData = Array.from({ length: 5000 }, () => '👋').join('');
+        const value = stream.Readable.from(rawData, { encoding: 'utf8' });
+        const expectedExtension = '.bin';
+
+        const res = await storageLocal.keyValueStore(storeName).setRecord({ key, value, contentType });
+        expect(res).toBeUndefined();
+
+        const recordPath = path.join(storeNameToDir(storeName), key + expectedExtension);
+        const savedData = await fs.readFile(recordPath, 'utf8');
+        expect(savedData).toEqual(rawData);
+    });
+
     describe('throws', () => {
         test('when store does not exist', async () => {
             const id = 'non-existent';

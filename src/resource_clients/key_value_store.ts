@@ -263,7 +263,6 @@ export class KeyValueStoreClient {
 
         try {
             if (value instanceof stream.Readable) {
-                // TODO: ensure this code works, as previous code was not correct typing wise
                 const writeStream = value.pipe(createWriteStream(filePath));
                 await streamFinished(writeStream);
             } else {
