@@ -1,47 +1,82 @@
-const fs = require('fs-extra');
-const mime = require('mime-types');
-const ow = require('ow').default;
-const path = require('path');
-const stream = require('stream');
-const util = require('util');
-const { isStream, isBuffer } = require('../utils');
-const { maybeParseBody } = require('../body_parser');
-const { DEFAULT_API_PARAM_LIMIT } = require('../consts');
+import { stat, move, remove, readdir, createReadStream, readFile, utimes, createWriteStream, writeFile, unlink } from 'fs-extra';
+import mime from 'mime-types';
+import ow from 'ow';
+import { join, dirname, parse, resolve } from 'path';
+import stream from 'stream';
+import util from 'util';
+import { isStream, isBuffer } from '../utils';
+import { maybeParseBody } from '../body_parser';
+import { DEFAULT_API_PARAM_LIMIT } from '../consts';
 
 const DEFAULT_LOCAL_FILE_EXTENSION = 'bin';
 const COMMON_LOCAL_FILE_EXTENSIONS = ['json', 'jpeg', 'png', 'html', 'jpg', 'bin', 'txt', 'xml', 'pdf', 'mp3', 'js', 'css', 'csv'];
 
 const streamFinished = util.promisify(stream.finished);
 
-/**
- * @typedef {object} KeyValueStoreRecord
- * @property {string} key
- * @property {*} value
- * @property {string} [contentType]
- */
+export interface KeyValueStoreRecord {
+    key: string;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    value: any;
+    contentType?: string;
+}
+
+export interface KeyValueStoreClientOptions {
+    name: string;
+    storageDir: string;
+}
+
+export interface KeyValueStoreData {
+    id: string;
+    name: string;
+    createdAt: Date;
+    modifiedAt: Date;
+    accessedAt: Date;
+}
+
+export interface KeyValueStoreClientUpdateOptions {
+    name?: string;
+}
+
+export interface KeyValueStoreClientListOptions {
+    limit?: number;
+    exclusiveStartKey?: string;
+}
+
+export interface KeyValueStoreItemData {
+    key: string;
+    size: number;
+}
+
+export interface KeyValueStoreClientListData {
+    count: number;
+    limit: number;
+    exclusiveStartKey?: string;
+    isTruncated: boolean;
+    nextExclusiveStartKey?: string;
+    items: KeyValueStoreItemData[];
+}
+
+export interface KeyValueStoreClientGetRecordOptions {
+    buffer?: boolean;
+    stream?: boolean;
+}
 
 /**
  * Key-value Store client.
  */
-class KeyValueStoreClient {
-    /**
-     * @param {object} options
-     * @param {string} options.name
-     * @param {string} options.storageDir
-     */
-    constructor(options) {
-        const {
-            name,
-            storageDir,
-        } = options;
+export class KeyValueStoreClient {
+    name: string;
 
+    storeDir: string;
+
+    constructor({ name, storageDir }: KeyValueStoreClientOptions) {
         this.name = name;
-        this.storeDir = path.join(storageDir, name);
+        this.storeDir = join(storageDir, name);
     }
 
-    async get() {
+    async get(): Promise<KeyValueStoreData | undefined> {
         try {
-            const stats = await fs.stat(this.storeDir);
+            const stats = await stat(this.storeDir);
             // The platform treats writes as access, but filesystem does not,
             // so if the modification time is more recent, use that.
             const accessedTimestamp = Math.max(stats.atimeMs, stats.mtimeMs);
@@ -55,19 +90,21 @@ class KeyValueStoreClient {
         } catch (err) {
             if (err.code !== 'ENOENT') throw err;
         }
+        return undefined;
     }
 
-    async update(newFields) {
+    async update(newFields: KeyValueStoreClientUpdateOptions): Promise<void> {
         // The validation is intentionally loose to prevent issues
         // when swapping to a remote storage in production.
         ow(newFields, ow.object.partialShape({
             name: ow.optional.string.minLength(1),
         }));
+
         if (!newFields.name) return;
 
-        const newPath = path.join(path.dirname(this.storeDir), newFields.name);
+        const newPath = join(dirname(this.storeDir), newFields.name);
         try {
-            await fs.move(this.storeDir, newPath);
+            await move(this.storeDir, newPath);
         } catch (err) {
             if (/dest already exists/.test(err.message)) {
                 throw new Error('Key-value store name is not unique.');
@@ -80,11 +117,11 @@ class KeyValueStoreClient {
         this.name = newFields.name;
     }
 
-    async delete() {
-        await fs.remove(this.storeDir);
+    async delete(): Promise<void> {
+        await remove(this.storeDir);
     }
 
-    async listKeys(options = {}) {
+    async listKeys(options: KeyValueStoreClientListOptions = {}): Promise<KeyValueStoreClientListData> {
         ow(options, ow.object.exactShape({
             limit: ow.optional.number.greaterThan(0),
             exclusiveStartKey: ow.optional.string,
@@ -95,9 +132,9 @@ class KeyValueStoreClient {
             exclusiveStartKey,
         } = options;
 
-        let files;
+        let files!: string[];
         try {
-            files = await fs.readdir(this.storeDir);
+            files = await readdir(this.storeDir);
         } catch (err) {
             if (err.code === 'ENOENT') {
                 this._throw404();
@@ -109,9 +146,9 @@ class KeyValueStoreClient {
         const items = [];
         for (const file of files) {
             try {
-                const { size } = await fs.stat(this._resolvePath(file));
+                const { size } = await stat(this._resolvePath(file));
                 items.push({
-                    key: path.parse(file).name,
+                    key: parse(file).name,
                     size,
                 });
             } catch (e) {
@@ -152,14 +189,7 @@ class KeyValueStoreClient {
         };
     }
 
-    /**
-     * @param {string} key
-     * @param {object} [options]
-     * @param {boolean} [options.buffer]
-     * @param {boolean} [options.stream]
-     * @return KeyValueStoreRecord
-     */
-    async getRecord(key, options = {}) {
+    async getRecord(key: string, options: KeyValueStoreClientGetRecordOptions = {}): Promise<KeyValueStoreRecord | undefined> {
         ow(key, ow.string);
         ow(options, ow.object.exactShape({
             buffer: ow.optional.boolean,
@@ -169,7 +199,7 @@ class KeyValueStoreClient {
             disableRedirect: ow.optional.boolean,
         }));
 
-        const handler = options.stream ? fs.createReadStream : fs.readFile;
+        const handler = options.stream ? createReadStream : readFile;
 
         let result;
         try {
@@ -183,26 +213,23 @@ class KeyValueStoreClient {
             }
         }
 
-        const record = {
+        const record: KeyValueStoreRecord = {
             key,
-            value: result.returnValue,
-            contentType: mime.contentType(result.fileName),
+            value: result.returnValue as Buffer,
+            contentType: mime.contentType(result.fileName) as string,
         };
 
         const shouldParseBody = !(options.buffer || options.stream);
         if (shouldParseBody) {
-            record.value = maybeParseBody(record.value, record.contentType);
+            record.value = maybeParseBody(record.value, record.contentType!);
         }
 
         this._updateTimestamps();
+
         return record;
     }
 
-    /**
-     * @param {KeyValueStoreRecord} record
-     * @return {Promise<void>}
-     */
-    async setRecord(record) {
+    async setRecord(record: KeyValueStoreRecord): Promise<void> {
         ow(record, ow.object.exactShape({
             key: ow.string,
             value: ow.any(ow.null, ow.string, ow.number, ow.object),
@@ -236,10 +263,10 @@ class KeyValueStoreClient {
 
         try {
             if (value instanceof stream.Readable) {
-                const writeStream = fs.createWriteStream(filePath, value);
+                const writeStream = value.pipe(createWriteStream(filePath));
                 await streamFinished(writeStream);
             } else {
-                await fs.writeFile(filePath, value);
+                await writeFile(filePath, value);
             }
         } catch (err) {
             if (err.code === 'ENOENT') {
@@ -251,14 +278,10 @@ class KeyValueStoreClient {
         this._updateTimestamps({ mtime: true });
     }
 
-    /**
-     * @param {string} key
-     * @return {Promise<void>}
-     */
-    async deleteRecord(key) {
+    async deleteRecord(key: string): Promise<void> {
         ow(key, ow.string);
         try {
-            const result = await this._handleFile(key, fs.unlink);
+            const result = await this._handleFile(key, unlink);
             if (result) this._updateTimestamps({ mtime: true });
         } catch (err) {
             if (err.code === 'ENOENT') {
@@ -271,12 +294,10 @@ class KeyValueStoreClient {
 
     /**
      * Helper function to resolve file paths.
-     * @param {string} fileName
-     * @returns {string}
      * @private
      */
-    _resolvePath(fileName) {
-        return path.resolve(this.storeDir, fileName);
+    private _resolvePath(fileName: string) {
+        return resolve(this.storeDir, fileName);
     }
 
     /**
@@ -286,17 +307,10 @@ class KeyValueStoreClient {
      * it will read a full list of files in the directory and attempt to find the file again.
      *
      * Returns an object when a file is found and handler executes successfully, undefined otherwise.
-     *
-     * @param {string} key
-     * @param {Function} handler
-     * @returns {Promise<?{ returnValue: *, fileName: string }>} undefined or object in the following format:
-     * {
-     *     returnValue: return value of the handler function,
-     *     fileName: name of the file including found extension
-     * }
      * @private
      */
-    async _handleFile(key, handler) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    private async _handleFile(key: string, handler: (...args: any[]) => unknown | Promise<unknown>) {
         for (const extension of COMMON_LOCAL_FILE_EXTENSIONS) {
             const fileName = `${key}.${extension}`;
             const result = await this._invokeHandler(fileName, handler);
@@ -305,59 +319,52 @@ class KeyValueStoreClient {
 
         const fileName = await this._findFileNameByKey(key);
         if (fileName) return this._invokeHandler(fileName, handler);
+        return undefined;
     }
 
-    async _invokeHandler(fileName, handler) {
+    private async _invokeHandler(fileName: string, handler: (...args: unknown[]) => unknown | Promise<unknown>) {
         try {
             const filePath = this._resolvePath(fileName);
             const returnValue = await handler(filePath);
             return { returnValue, fileName };
         } catch (err) {
             if (err.code !== 'ENOENT') throw err;
+            return undefined;
         }
     }
 
     /**
      * Performs a lookup for a file in the local emulation directory's file list.
-     *
-     * @param {string} key
-     * @returns {Promise<?string>}
      * @private
      */
-    async _findFileNameByKey(key) {
+    private async _findFileNameByKey(key: string) {
         try {
-            const files = await fs.readdir(this.storeDir);
-            return files.find((file) => key === path.parse(file).name);
+            const files = await readdir(this.storeDir);
+            return files.find((file) => key === parse(file).name);
         } catch (err) {
             if (err.code === 'ENOENT') this._throw404();
             throw err;
         }
     }
 
-    _throw404() {
+    private _throw404() {
         const err = new Error(`Key-value store with id: ${this.name} does not exist.`);
+        // @ts-expect-error Adding fs-like code to the error
         err.code = 'ENOENT';
         throw err;
     }
 
-    /**
-     * @param {object} [options]
-     * @param {boolean} [options.mtime]
-     * @private
-     */
-    _updateTimestamps({ mtime } = {}) {
+    private _updateTimestamps({ mtime }: { mtime?: boolean; } = {}) {
         // It's throwing EINVAL on Windows. Not sure why,
         // so the function is a best effort only.
         const now = new Date();
         let promise;
         if (mtime) {
-            promise = fs.utimes(this.storeDir, now, now);
+            promise = utimes(this.storeDir, now, now);
         } else {
-            promise = fs.stat(this.storeDir)
-                .then((stats) => fs.utimes(this.storeDir, now, stats.mtime));
+            promise = stat(this.storeDir)
+                .then((stats) => utimes(this.storeDir, now, stats.mtime));
         }
         promise.catch(() => { /* we don't care that much if it sometimes fails */ });
     }
 }
-
-module.exports = KeyValueStoreClient;
