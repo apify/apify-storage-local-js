@@ -1,9 +1,10 @@
-const fs = require('fs-extra');
-const path = require('path');
-const stream = require('stream');
-const { ApifyStorageLocal } = require('../dist/index');
-const { STORAGE_NAMES } = require('../dist/consts');
-const { prepareTestDir, removeTestDir } = require('./_tools');
+import { emptyDirSync, ensureDirSync, readdirSync, readFile, writeFileSync } from 'fs-extra';
+import { join } from 'path';
+import stream from 'stream';
+import { ApifyStorageLocal } from '../src/index';
+import { STORAGE_NAMES } from '../src/consts';
+import { prepareTestDir, removeTestDir } from './_tools';
+import type { KeyValueStoreClient } from '../src/resource_clients/key_value_store';
 
 const TEST_STORES = {
     1: {
@@ -16,19 +17,23 @@ const TEST_STORES = {
     },
 };
 
-/** @type ApifyStorageLocal */
-let storageLocal;
-let counter;
-let STORAGE_DIR;
-let storeNameToDir;
+interface TestStore {
+    name: string;
+    recordCount: number;
+}
+
+let STORAGE_DIR: string;
+let storageLocal: ApifyStorageLocal;
+let counter: ReturnType<typeof createCounter>;
+let storeNameToDir: (storeName: string) => string;
 beforeEach(() => {
     STORAGE_DIR = prepareTestDir();
     storageLocal = new ApifyStorageLocal({
         storageDir: STORAGE_DIR,
     });
-    const keyValueStoresDir = path.join(STORAGE_DIR, STORAGE_NAMES.KEY_VALUE_STORES);
+    const keyValueStoresDir = join(STORAGE_DIR, STORAGE_NAMES.KEY_VALUE_STORES);
     storeNameToDir = (storeName) => {
-        return path.join(keyValueStoresDir, storeName);
+        return join(keyValueStoresDir, storeName);
     };
     counter = createCounter(keyValueStoresDir);
     seed(keyValueStoresDir);
@@ -39,16 +44,16 @@ afterAll(() => {
 });
 
 test('stores directory exists', () => {
-    const subDirs = fs.readdirSync(STORAGE_DIR);
+    const subDirs = readdirSync(STORAGE_DIR);
     expect(subDirs).toContain(STORAGE_NAMES.KEY_VALUE_STORES);
 });
 
 describe('get store', () => {
     test('returns correct store', async () => {
-        let store = await storageLocal.keyValueStore('first').get();
+        let store = (await storageLocal.keyValueStore('first').get())!;
         expect(store.id).toBe('first');
         expect(store.name).toBe('first');
-        store = await storageLocal.keyValueStore('second').get();
+        store = (await storageLocal.keyValueStore('second').get())!;
         expect(store.id).toBe('second');
         expect(store.name).toBe('second');
     });
@@ -100,8 +105,8 @@ describe('setRecord', () => {
         await storageLocal.keyValueStore(storeName).setRecord(stripRecord(record));
         expect(counter.records(storeName)).toBe(startCount + 1);
 
-        const recordPath = path.join(storeNameToDir(storeName), record.filename);
-        const savedData = await fs.readFile(recordPath);
+        const recordPath = join(storeNameToDir(storeName), record.filename);
+        const savedData = await readFile(recordPath);
         expect(savedData).toEqual(Buffer.from(record.value));
     });
 
@@ -112,8 +117,8 @@ describe('setRecord', () => {
 
         await storageLocal.keyValueStore(storeName).setRecord(newRecord);
         expect(counter.records(storeName)).toBe(startCount);
-        const recordPath = path.join(storeNameToDir(storeName), seededRecord.filename);
-        const savedData = await fs.readFile(recordPath);
+        const recordPath = join(storeNameToDir(storeName), seededRecord.filename);
+        const savedData = await readFile(recordPath);
         expect(savedData).toEqual(newRecord.value);
     });
 
@@ -125,8 +130,8 @@ describe('setRecord', () => {
         const res = await storageLocal.keyValueStore(storeName).setRecord({ key, value });
         expect(res).toBeUndefined();
 
-        const recordPath = path.join(storeNameToDir(storeName), key + expectedExtension);
-        const savedData = await fs.readFile(recordPath, 'utf8');
+        const recordPath = join(storeNameToDir(storeName), key + expectedExtension);
+        const savedData = await readFile(recordPath, 'utf8');
         expect(savedData).toEqual(value);
     });
 
@@ -138,8 +143,8 @@ describe('setRecord', () => {
         const res = await storageLocal.keyValueStore(storeName).setRecord({ key, value });
         expect(res).toBeUndefined();
 
-        const recordPath = path.join(storeNameToDir(storeName), key + expectedExtension);
-        const savedData = await fs.readFile(recordPath, 'utf8');
+        const recordPath = join(storeNameToDir(storeName), key + expectedExtension);
+        const savedData = await readFile(recordPath, 'utf8');
         expect(JSON.parse(savedData)).toEqual(value);
     });
 
@@ -152,8 +157,8 @@ describe('setRecord', () => {
         const res = await storageLocal.keyValueStore(storeName).setRecord({ key, value });
         expect(res).toBeUndefined();
 
-        const recordPath = path.join(storeNameToDir(storeName), key + expectedExtension);
-        const savedData = await fs.readFile(recordPath);
+        const recordPath = join(storeNameToDir(storeName), key + expectedExtension);
+        const savedData = await readFile(recordPath);
         expect(savedData).toEqual(value);
     });
 
@@ -166,8 +171,8 @@ describe('setRecord', () => {
         const res = await storageLocal.keyValueStore(storeName).setRecord({ key, value, contentType });
         expect(res).toBeUndefined();
 
-        const recordPath = path.join(storeNameToDir(storeName), key + expectedExtension);
-        const savedData = await fs.readFile(recordPath, 'utf8');
+        const recordPath = join(storeNameToDir(storeName), key + expectedExtension);
+        const savedData = await readFile(recordPath, 'utf8');
         expect(savedData).toEqual(value);
     });
 
@@ -181,8 +186,8 @@ describe('setRecord', () => {
         const res = await storageLocal.keyValueStore(storeName).setRecord({ key, value, contentType });
         expect(res).toBeUndefined();
 
-        const recordPath = path.join(storeNameToDir(storeName), key + expectedExtension);
-        const savedData = await fs.readFile(recordPath, 'utf8');
+        const recordPath = join(storeNameToDir(storeName), key + expectedExtension);
+        const savedData = await readFile(recordPath, 'utf8');
         expect(savedData).toEqual(rawData);
     });
 
@@ -221,15 +226,15 @@ describe('getRecord', () => {
     test('parses JSON', async () => {
         let savedRecord = numToRecord(1);
         let expectedRecord = stripRecord(savedRecord);
-        expectedRecord.value = JSON.parse(expectedRecord.value);
+        expectedRecord.value = JSON.parse(expectedRecord.value as string);
         let record = await storageLocal.keyValueStore(storeName).getRecord(savedRecord.key);
         expect(record).toEqual(expectedRecord);
 
         savedRecord = numToRecord(10);
         expectedRecord = stripRecord(savedRecord);
-        expectedRecord.value = JSON.parse(expectedRecord.value);
+        expectedRecord.value = JSON.parse(expectedRecord.value as string);
         record = await storageLocal.keyValueStore('second').getRecord(savedRecord.key);
-        expect(record).toEqual(stripRecord(expectedRecord));
+        expect(record).toEqual(expectedRecord);
     });
 
     test('returns buffer when selected', async () => {
@@ -244,7 +249,7 @@ describe('getRecord', () => {
         const savedRecord = numToRecord(7);
         const expectedRecord = stripRecord(savedRecord);
         expectedRecord.value = Buffer.from(savedRecord.value);
-        const record = await storageLocal.keyValueStore('second').getRecord(savedRecord.key);
+        const record = (await storageLocal.keyValueStore('second').getRecord(savedRecord.key))!;
         expect(record).toEqual(expectedRecord);
         expect(record.value).toBeInstanceOf(Buffer);
     });
@@ -253,7 +258,7 @@ describe('getRecord', () => {
         const savedRecord = numToRecord(1);
         const expectedRecord = stripRecord(savedRecord);
 
-        const record = await storageLocal.keyValueStore(storeName).getRecord(savedRecord.key, { stream: true });
+        const record = (await storageLocal.keyValueStore(storeName).getRecord(savedRecord.key, { stream: true }))!;
         expect(record.value).toBeInstanceOf(stream.Readable);
         const chunks = [];
         for await (const chunk of record.value) {
@@ -282,11 +287,11 @@ describe('deleteRecord', () => {
 
     test('deletes record', async () => {
         const record = numToRecord(3);
-        const recordPath = path.join(storeNameToDir(storeName), record.filename);
-        await fs.readFile(recordPath);
+        const recordPath = join(storeNameToDir(storeName), record.filename);
+        await readFile(recordPath);
         await storageLocal.keyValueStore(storeName).deleteRecord(record.key);
         try {
-            await fs.readFile(recordPath);
+            await readFile(recordPath);
             throw new Error('wrong error');
         } catch (err) {
             expect(err.code).toBe('ENOENT');
@@ -386,18 +391,19 @@ describe('listKeys', () => {
 describe('timestamps:', () => {
     const storeName = 'first';
     const testInitTimestamp = Date.now();
-    let client;
-    let spy;
+    let client: KeyValueStoreClient;
+    let spy: ReturnType<typeof jest.spyOn>;
 
     beforeEach(() => {
         jest.clearAllMocks();
         client = storageLocal.keyValueStore(storeName);
+        // @ts-expect-error Spying on a private function
         spy = jest.spyOn(client, '_updateTimestamps');
     });
 
     test('createdAt has a valid date', async () => {
         await wait10ms();
-        const { createdAt } = await client.get();
+        const { createdAt } = (await client.get())!;
         const createdAtTimestamp = createdAt.getTime();
         expect(createdAtTimestamp).toBeGreaterThan(testInitTimestamp);
         expect(createdAtTimestamp).toBeLessThan(Date.now());
@@ -433,11 +439,11 @@ describe('timestamps:', () => {
     });
 });
 
-async function wait10ms() {
+function wait10ms() {
     return new Promise((r) => setTimeout(r, 100));
 }
 
-function seed(keyValueStoresDir) {
+function seed(keyValueStoresDir: string) {
     Object.values(TEST_STORES).forEach((store) => {
         const storeDir = insertStore(keyValueStoresDir, store);
         const records = createRecords(store);
@@ -445,22 +451,22 @@ function seed(keyValueStoresDir) {
     });
 }
 
-function insertStore(dir, store) {
-    const storeDir = path.join(dir, store.name);
-    fs.ensureDirSync(storeDir);
-    fs.emptyDirSync(storeDir);
+function insertStore(dir: string, store: TestStore) {
+    const storeDir = join(dir, store.name);
+    ensureDirSync(storeDir);
+    emptyDirSync(storeDir);
     return storeDir;
 }
 
-function insertRecords(dir, records) {
+function insertRecords(dir: string, records: ReturnType<typeof numToRecord>[]) {
     records.forEach((record) => {
-        const filePath = path.join(dir, record.filename);
-        fs.writeFileSync(filePath, record.value);
+        const filePath = join(dir, record.filename);
+        writeFileSync(filePath, record.value);
     });
 }
 
-function createRecords(store) {
-    const records = [];
+function createRecords(store: TestStore) {
+    const records: ReturnType<typeof numToRecord>[] = [];
     for (let i = 0; i < store.recordCount; i++) {
         const record = numToRecord(i);
         records.push(record);
@@ -468,7 +474,7 @@ function createRecords(store) {
     return records;
 }
 
-function numToRecord(num) {
+function numToRecord(num: number) {
     if (num % 3 === 0) {
         const key = `markup_${num}`;
         const value = `<html><body>${num}: ✅</body></html>`;
@@ -504,18 +510,19 @@ function numToRecord(num) {
     };
 }
 
-function stripRecord(record) {
+function stripRecord(record: ReturnType<typeof numToRecord>) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Because we strip these variables from the record
     const { filename, size, ...strippedRecord } = record;
     return strippedRecord;
 }
 
-function createCounter(keyValueStoresDir) {
+function createCounter(keyValueStoresDir: string) {
     return {
         stores() {
-            return fs.readdirSync(keyValueStoresDir).length;
+            return readdirSync(keyValueStoresDir).length;
         },
-        records(name) {
-            return fs.readdirSync(path.join(keyValueStoresDir, name)).length;
+        records(name: string) {
+            return readdirSync(join(keyValueStoresDir, name)).length;
         },
     };
 }

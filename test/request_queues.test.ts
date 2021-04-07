@@ -16,7 +16,7 @@ const REQUESTS_TABLE_NAME = `${STORAGE_NAMES.REQUEST_QUEUES}_requests`;
  * Queue ID must always be 1, because we keep only a single
  * queue per DB file and SQLite starts indexing at 1.
  */
-const QUEUE_ID = '1';
+const QUEUE_ID = 1;
 
 const TEST_QUEUES = {
     1: {
@@ -36,7 +36,7 @@ export interface TestQueue {
 
 let STORAGE_DIR: string;
 let storageLocal: ApifyStorageLocal;
-let counter: Counter;
+let counter: ReturnType<typeof createCounter>;
 let queueNameToDb: (name: string) => Database;
 let markRequestHandled: (db: Database, requestId: string) => void;
 beforeEach(() => {
@@ -782,7 +782,7 @@ function insertQueue(db: Database, queue: TestQueue) {
     return db.prepare(`
         INSERT INTO ${STORAGE_NAMES.REQUEST_QUEUES}(name, totalRequestCount)
         VALUES(?, ?)
-    `).run(queue.name, queue.requestCount).lastInsertRowid.toString();
+    `).run(queue.name, queue.requestCount).lastInsertRowid as number;
 }
 
 function insertRequests(db: Database, models: RequestModel[]) {
@@ -797,7 +797,7 @@ function insertRequests(db: Database, models: RequestModel[]) {
     models.forEach((model) => insert.run(model));
 }
 
-function createRequestModels(queueId: string, count: number) {
+function createRequestModels(queueId: string | number, count: number) {
     const requestModels = [];
     for (let i = 0; i < count; i++) {
         const request = numToRequest(i);
@@ -828,7 +828,7 @@ function numToRequest(num: number): RequestModel {
     };
 }
 
-function createCounter(requestQueuesDir: string, dbConnections: DatabaseConnectionCache): Counter {
+function createCounter(requestQueuesDir: string, dbConnections: DatabaseConnectionCache) {
     return {
         queues() {
             let count = 0;
@@ -853,5 +853,3 @@ function createCounter(requestQueuesDir: string, dbConnections: DatabaseConnecti
         },
     };
 }
-
-type Counter = { queues(): number; requests(queueName: string): number; };

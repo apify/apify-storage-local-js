@@ -32,7 +32,7 @@ export interface QueueHead {
 
 export interface RequestModel {
     id?: string;
-    queueId: string;
+    queueId: string | number;
     orderNo: number | null;
     url: string;
     uniqueKey: string;
