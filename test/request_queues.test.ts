@@ -1,20 +1,22 @@
-const fs = require('fs-extra');
-const ow = require('ow');
-const path = require('path');
-const ApifyStorageLocal = require('../src/index');
-const { STORAGE_NAMES, DATABASE_FILE_NAME } = require('../src/consts');
-const { RequestQueueEmulator } = require('../src/emulators/request_queue_emulator');
-const { uniqueKeyToRequestId } = require('../src/utils');
-const { prepareTestDir, removeTestDir } = require('./_tools');
+import { ensureDirSync, readdirSync } from 'fs-extra';
+import { ArgumentError } from 'ow';
+import { join } from 'path';
+import type { Database, Statement } from 'better-sqlite3-with-prebuilds';
+import { ApifyStorageLocal } from '../src/index';
+import { STORAGE_NAMES, DATABASE_FILE_NAME } from '../src/consts';
+import { RequestQueueEmulator } from '../src/emulators/request_queue_emulator';
+import { uniqueKeyToRequestId } from '../src/utils';
+import { prepareTestDir, removeTestDir } from './_tools';
+import type { DatabaseConnectionCache } from '../src/database_connection_cache';
+import type { RequestModel } from '../src/resource_clients/request_queue';
 
 const REQUESTS_TABLE_NAME = `${STORAGE_NAMES.REQUEST_QUEUES}_requests`;
 
 /**
  * Queue ID must always be 1, because we keep only a single
  * queue per DB file and SQLite starts indexing at 1.
- * @type {number}
  */
-const QUEUE_ID = 1;
+const QUEUE_ID = '1';
 
 const TEST_QUEUES = {
     1: {
@@ -27,25 +29,29 @@ const TEST_QUEUES = {
     },
 };
 
-/** @type ApifyStorageLocal */
-let storageLocal;
-let counter;
-let markRequestHandled;
-let STORAGE_DIR;
-let queueNameToDb;
+export interface TestQueue {
+    name: string;
+    requestCount: number;
+}
+
+let STORAGE_DIR: string;
+let storageLocal: ApifyStorageLocal;
+let counter: Counter;
+let queueNameToDb: (name: string) => Database;
+let markRequestHandled: (db: Database, requestId: string) => void;
 beforeEach(() => {
     STORAGE_DIR = prepareTestDir();
     storageLocal = new ApifyStorageLocal({
         storageDir: STORAGE_DIR,
     });
-    const requestQueuesDir = path.join(STORAGE_DIR, STORAGE_NAMES.REQUEST_QUEUES);
-    queueNameToDb = (name) => {
-        const dbPath = path.join(requestQueuesDir, name, DATABASE_FILE_NAME);
+    const requestQueuesDir = join(STORAGE_DIR, STORAGE_NAMES.REQUEST_QUEUES);
+    queueNameToDb = (name: string) => {
+        const dbPath = join(requestQueuesDir, name, DATABASE_FILE_NAME);
         return storageLocal.dbConnections.openConnection(dbPath);
     };
     counter = createCounter(requestQueuesDir, storageLocal.dbConnections);
-    markRequestHandled = (db, rId) => {
-        db.transaction((requestId) => {
+    markRequestHandled = (db: Database, rId: string) => {
+        db.transaction((requestId: string) => {
             db.prepare(`
                 UPDATE ${REQUESTS_TABLE_NAME}
                 SET orderNo = null
@@ -71,7 +77,7 @@ afterAll(() => {
 
 describe('sanity checks for seeded data', () => {
     test('queues directory exists', () => {
-        const subDirs = fs.readdirSync(STORAGE_DIR);
+        const subDirs = readdirSync(STORAGE_DIR);
         expect(subDirs).toContain(STORAGE_NAMES.REQUEST_QUEUES);
     });
 
@@ -108,8 +114,8 @@ describe('sanity checks for seeded data', () => {
 describe('timestamps:', () => {
     const testInitTimestamp = Date.now();
     const queueName = 'first';
-    let db;
-    let selectTimestamps;
+    let db: Database;
+    let selectTimestamps: Statement;
     beforeEach(() => {
         db = queueNameToDb(queueName);
         selectTimestamps = db.prepare(`
@@ -167,7 +173,7 @@ describe('timestamps:', () => {
     test('getRequest updates accessedAt', async () => {
         const beforeGet = selectTimestamps.get();
         const requestId = numToRequest(1).id;
-        await storageLocal.requestQueue(queueName).getRequest(requestId);
+        await storageLocal.requestQueue(queueName).getRequest(requestId!);
         const afterGet = selectTimestamps.get();
         expect(beforeGet.modifiedAt).toBe(afterGet.modifiedAt);
         expect(new Date(afterGet.accessedAt).getTime()).toBeGreaterThan(new Date(beforeGet.accessedAt).getTime());
@@ -185,8 +191,8 @@ describe('timestamps:', () => {
 describe('request counts:', () => {
     const queueName = 'first';
     const startCount = TEST_QUEUES[1].requestCount;
-    let db;
-    let selectRequestCounts;
+    let db: Database;
+    let selectRequestCounts: Statement;
     beforeEach(() => {
         db = queueNameToDb(queueName);
         selectRequestCounts = db.prepare(`
@@ -197,7 +203,7 @@ describe('request counts:', () => {
     test('stay the same after get functions', async () => {
         const requestId = numToRequest(1).id;
 
-        await storageLocal.requestQueue(queueName).getRequest(requestId);
+        await storageLocal.requestQueue(queueName).getRequest(requestId!);
         let counts = selectRequestCounts.get();
         expect(counts.totalRequestCount).toBe(startCount);
         expect(counts.handledRequestCount).toBe(0);
@@ -246,7 +252,7 @@ describe('request counts:', () => {
 
     test('handling of a handled request is a no-op', async () => {
         const request = numToRequest(1);
-        markRequestHandled(db, request.id);
+        markRequestHandled(db, request.id!);
         let counts = selectRequestCounts.get();
         expect(counts.handledRequestCount).toBe(1);
         request.handledAt = new Date();
@@ -261,7 +267,7 @@ describe('request counts:', () => {
     test('un-handling of a handled request decrements handledRequestCount', async () => {
         const request = numToRequest(1);
         request.handledAt = undefined;
-        markRequestHandled(db, request.id);
+        markRequestHandled(db, request.id!);
         let counts = selectRequestCounts.get();
         expect(counts.handledRequestCount).toBe(1);
 
@@ -283,6 +289,7 @@ describe('request counts:', () => {
         expect(counts.pendingRequestCount).toBe(startCount);
     });
 
+    /* eslint-disable @typescript-eslint/no-empty-function */
     test.skip('deleting a request decrements totalRequestCount', async () => {
 
     });
@@ -294,14 +301,15 @@ describe('request counts:', () => {
     test.skip('deleting an pending request does not decrement handledRequestCount', async () => {
 
     });
+    /* eslint-enable @typescript-eslint/no-empty-function */
 });
 
 describe('get queue', () => {
     test('returns correct queue', async () => {
-        let queue = await storageLocal.requestQueue('first').get();
+        let queue = (await storageLocal.requestQueue('first').get())!;
         expect(queue.id).toBe('first');
         expect(queue.name).toBe('first');
-        queue = await storageLocal.requestQueue('second').get();
+        queue = (await storageLocal.requestQueue('second').get())!;
         expect(queue.id).toBe('second');
         expect(queue.name).toBe('second');
     });
@@ -342,24 +350,24 @@ describe('addRequest', () => {
     const queueName = 'first';
     const startCount = TEST_QUEUES[1].requestCount;
 
-    let db;
-    let request;
-    let requestId;
+    let db: Database;
+    let request: RequestModel;
+    let requestId: string;
     beforeEach(() => {
         db = queueNameToDb(queueName);
         request = numToRequest(1);
-        requestId = request.id;
+        requestId = request.id!;
         request.id = undefined;
     });
 
     test('adds a request', async () => { /* eslint-disable no-shadow */
-        const request = numToRequest(startCount + 1);
-        const requestId = request.id;
-        request.id = undefined;
+        const newRequest = numToRequest(startCount + 1);
+        const newRequestId = newRequest.id;
+        newRequest.id = undefined;
 
-        const queueOperationInfo = await storageLocal.requestQueue(queueName).addRequest(request);
+        const queueOperationInfo = await storageLocal.requestQueue(queueName).addRequest(newRequest);
         expect(queueOperationInfo).toEqual({
-            requestId,
+            requestId: newRequestId,
             wasAlreadyPresent: false,
             wasAlreadyHandled: false,
         });
@@ -368,18 +376,18 @@ describe('addRequest', () => {
         const requestModel = db.prepare(`
             SELECT * FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND id = ?
-        `).get(requestId);
+        `).get(newRequestId);
         expect(requestModel.queueId).toBe(QUEUE_ID);
-        expect(requestModel.id).toBe(requestId);
-        expect(requestModel.url).toBe(request.url);
-        expect(requestModel.uniqueKey).toBe(request.uniqueKey);
+        expect(requestModel.id).toBe(newRequestId);
+        expect(requestModel.url).toBe(newRequest.url);
+        expect(requestModel.uniqueKey).toBe(newRequest.uniqueKey);
         expect(requestModel.retryCount).toBe(0);
         expect(requestModel.method).toBe('GET');
         expect(typeof requestModel.orderNo).toBe('number');
 
         const savedRequest = JSON.parse(requestModel.json);
-        expect(savedRequest.id).toBe(requestId);
-        expect(savedRequest).toMatchObject({ ...request, id: requestId });
+        expect(savedRequest.id).toBe(newRequestId);
+        expect(savedRequest).toMatchObject({ ...newRequest, id: newRequestId });
     });
 
     test('succeeds when request is already present', async () => {
@@ -438,61 +446,63 @@ describe('addRequest', () => {
     });
 
     test('forefront adds request to queue head', async () => { /* eslint-disable no-shadow */
-        const request = numToRequest(startCount + 1);
-        const requestId = request.id;
-        request.id = undefined;
+        const newRequest = numToRequest(startCount + 1);
+        const newRequestId = newRequest.id;
+        newRequest.id = undefined;
 
-        await storageLocal.requestQueue(queueName).addRequest(request, { forefront: true });
+        await storageLocal.requestQueue(queueName).addRequest(newRequest, { forefront: true });
         expect(counter.requests(queueName)).toBe(startCount + 1);
         const firstId = db.prepare(`
             SELECT id FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND orderNo IS NOT NULL
             LIMIT 1
         `).pluck().get();
-        expect(firstId).toBe(requestId);
+        expect(firstId).toBe(newRequestId);
     });
 
     describe('throws', () => {
-        let request;
+        let throwRequest: RequestModel;
         beforeEach(() => {
-            request = numToRequest(startCount + 1);
-            request.id = undefined;
+            throwRequest = numToRequest(startCount + 1);
+            throwRequest.id = undefined;
         });
 
         test('on missing url', async () => {
-            delete request.url;
+            Reflect.deleteProperty(throwRequest, 'url');
+
             try {
-                await storageLocal.requestQueue(queueName).addRequest(request);
+                await storageLocal.requestQueue(queueName).addRequest(throwRequest);
                 throw new Error('wrong-error');
             } catch (err) {
-                expect(err).toBeInstanceOf(ow.ArgumentError);
+                expect(err).toBeInstanceOf(ArgumentError);
             }
         });
         test('on missing uniqueKey', async () => {
-            delete request.uniqueKey;
+            Reflect.deleteProperty(throwRequest, 'uniqueKey');
+
             try {
-                await storageLocal.requestQueue(queueName).addRequest(request);
+                await storageLocal.requestQueue(queueName).addRequest(throwRequest);
                 throw new Error('wrong-error');
             } catch (err) {
-                expect(err).toBeInstanceOf(ow.ArgumentError);
+                expect(err).toBeInstanceOf(ArgumentError);
             }
         });
         test('when id is provided', async () => {
-            request.id = uniqueKeyToRequestId(request.uniqueKey);
+            throwRequest.id = uniqueKeyToRequestId(throwRequest.uniqueKey);
             try {
-                await storageLocal.requestQueue(queueName).addRequest(request);
+                await storageLocal.requestQueue(queueName).addRequest(throwRequest);
                 throw new Error('wrong-error');
             } catch (err) {
-                expect(err).toBeInstanceOf(ow.ArgumentError);
+                expect(err).toBeInstanceOf(ArgumentError);
             }
         });
         test('when queue does not exist', async () => {
-            const queueName = 'this-queue-does-not-exist'; // eslint-disable-line no-shadow
+            const nonExistantQueueName = 'this-queue-does-not-exist';
             try {
-                await storageLocal.requestQueue(queueName).addRequest(request);
+                await storageLocal.requestQueue(nonExistantQueueName).addRequest(throwRequest);
                 throw new Error('wrong-error');
             } catch (err) {
-                expect(err.message).toBe(`Request queue with id: ${queueName} does not exist.`);
+                expect(err.message).toBe(`Request queue with id: ${nonExistantQueueName} does not exist.`);
             }
         });
     });
@@ -504,32 +514,32 @@ describe('getRequest', () => {
 
     test('gets requests', async () => {
         let expectedReq = numToRequest(3);
-        let request = await storageLocal.requestQueue(queueName).getRequest(expectedReq.id);
+        let request = await storageLocal.requestQueue(queueName).getRequest(expectedReq.id!);
         expect(request).toEqual(expectedReq);
         expectedReq = numToRequest(30);
-        request = await storageLocal.requestQueue('second').getRequest(expectedReq.id);
+        request = await storageLocal.requestQueue('second').getRequest(expectedReq.id!);
         expect(request).toEqual(expectedReq);
     });
 
     test('returns undefined for non-existent requests', async () => {
         const expectedReq = numToRequest(startCount + 1);
-        const request = await storageLocal.requestQueue('first').getRequest(expectedReq.id);
+        const request = await storageLocal.requestQueue('first').getRequest(expectedReq.id!);
         expect(request).toBeUndefined();
     });
 
     describe('throws', () => {
-        let request;
+        let request: RequestModel;
         beforeEach(() => {
             request = numToRequest(1);
         });
 
         test('when queue does not exist', async () => {
-            const queueName = 'this-queue-does-not-exist'; // eslint-disable-line no-shadow
+            const nonExistentQueueName = 'this-queue-does-not-exist';
             try {
-                await storageLocal.requestQueue(queueName).getRequest(request.id);
+                await storageLocal.requestQueue(nonExistentQueueName).getRequest(request.id!);
                 throw new Error('wrong-error');
             } catch (err) {
-                expect(err.message).toBe(`Request queue with id: ${queueName} does not exist.`);
+                expect(err.message).toBe(`Request queue with id: ${nonExistentQueueName} does not exist.`);
             }
         });
     });
@@ -541,8 +551,8 @@ describe('updateRequest', () => {
     const retryCount = 2;
     const method = 'POST';
 
-    let request;
-    let db;
+    let db: Database;
+    let request: RequestModel;
     beforeEach(() => {
         db = queueNameToDb(queueName);
         request = {
@@ -573,11 +583,11 @@ describe('updateRequest', () => {
     });
 
     test('adds request when not present', async () => {
-        const request = numToRequest(startCount + 1); // eslint-disable-line no-shadow
+        const updatedRequest = numToRequest(startCount + 1);
 
-        const queueOperationInfo = await storageLocal.requestQueue(queueName).updateRequest(request);
+        const queueOperationInfo = await storageLocal.requestQueue(queueName).updateRequest(updatedRequest);
         expect(queueOperationInfo).toEqual({
-            requestId: request.id,
+            requestId: updatedRequest.id,
             wasAlreadyPresent: false,
             wasAlreadyHandled: false,
         });
@@ -585,7 +595,7 @@ describe('updateRequest', () => {
     });
 
     test('succeeds when request is already handled', async () => {
-        markRequestHandled(db, request.id);
+        markRequestHandled(db, request.id!);
 
         const queueOperationInfo = await storageLocal.requestQueue(queueName).updateRequest(request);
         expect(queueOperationInfo).toEqual({
@@ -621,21 +631,23 @@ describe('updateRequest', () => {
 
     describe('throws', () => {
         test('on missing url', async () => {
-            delete request.url;
+            Reflect.deleteProperty(request, 'url');
+
             try {
                 await storageLocal.requestQueue(queueName).updateRequest(request);
                 throw new Error('wrong-error');
             } catch (err) {
-                expect(err).toBeInstanceOf(ow.ArgumentError);
+                expect(err).toBeInstanceOf(ArgumentError);
             }
         });
         test('on missing uniqueKey', async () => {
-            delete request.uniqueKey;
+            Reflect.deleteProperty(request, 'uniqueKey');
+
             try {
                 await storageLocal.requestQueue(queueName).updateRequest(request);
                 throw new Error('wrong-error');
             } catch (err) {
-                expect(err).toBeInstanceOf(ow.ArgumentError);
+                expect(err).toBeInstanceOf(ArgumentError);
             }
         });
         test('when id is not provided', async () => {
@@ -644,16 +656,16 @@ describe('updateRequest', () => {
                 await storageLocal.requestQueue(queueName).updateRequest(request);
                 throw new Error('wrong-error');
             } catch (err) {
-                expect(err).toBeInstanceOf(ow.ArgumentError);
+                expect(err).toBeInstanceOf(ArgumentError);
             }
         });
         test('when queue does not exist', async () => {
-            const queueName = 'this-queue-does-not-exist'; // eslint-disable-line no-shadow
+            const nonExistantQueueName = 'this-queue-does-not-exist';
             try {
-                await storageLocal.requestQueue(queueName).updateRequest(request);
+                await storageLocal.requestQueue(nonExistantQueueName).updateRequest(request);
                 throw new Error('wrong-error');
             } catch (err) {
-                expect(err.message).toBe(`Request queue with id: ${queueName} does not exist.`);
+                expect(err.message).toBe(`Request queue with id: ${nonExistantQueueName} does not exist.`);
             }
         });
     });
@@ -662,15 +674,15 @@ describe('updateRequest', () => {
 describe.skip('deleteRequest', () => {
     const queueName = 'first';
     const startCount = TEST_QUEUES[1].requestCount;
-    let db;
-    let request;
+    let db: Database;
+    let request: RequestModel;
     beforeEach(() => {
         db = queueNameToDb(queueName);
         request = numToRequest(5);
     });
 
     test('deletes request', async () => {
-        await storageLocal.requestQueue(queueName).deleteRequest(request.id);
+        await storageLocal.requestQueue(queueName).deleteRequest(request.id!);
         const requestModel = db.prepare(`
             SELECT * FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND id = ?
@@ -681,18 +693,18 @@ describe.skip('deleteRequest', () => {
 
     test('returns undefined for non-existent request', async () => {
         const newRequest = numToRequest(startCount + 1);
-        const result = await storageLocal.requestQueue(queueName).deleteRequest(newRequest.id);
+        const result = await storageLocal.requestQueue(queueName).deleteRequest(newRequest.id!);
         expect(result).toBeUndefined();
     });
 
     describe('throws', () => {
         test('when queue does not exist', async () => {
-            const queueName = 'this-queue-does-not-exist'; // eslint-disable-line no-shadow
+            const nonExistantQueueName = 'this-queue-does-not-exist';
             try {
-                await storageLocal.requestQueue(queueName).deleteRequest(request.id);
+                await storageLocal.requestQueue(nonExistantQueueName).deleteRequest(request.id!);
                 throw new Error('wrong-error');
             } catch (err) {
-                expect(err.message).toBe(`Request queue with id: ${queueName} does not exist.`);
+                expect(err.message).toBe(`Request queue with id: ${nonExistantQueueName} does not exist.`);
             }
         });
     });
@@ -702,7 +714,7 @@ describe('listHead', () => {
     const queueName = 'second';
     const startCount = TEST_QUEUES[2].requestCount;
 
-    let db;
+    let db: Database;
     beforeEach(() => {
         db = queueNameToDb(queueName);
     });
@@ -733,7 +745,7 @@ describe('listHead', () => {
         const handledCount = 10;
         const models = createRequestModels(queueName, startCount).sort((a, b) => a.orderNo - b.orderNo);
         const modelsToHandle = models.slice(0, handledCount);
-        modelsToHandle.forEach((m) => markRequestHandled(db, m.id));
+        modelsToHandle.forEach((m) => markRequestHandled(db, m.id!));
         const expectedItems = models.slice(handledCount).map((m) => JSON.parse(m.json));
 
         const { items } = await storageLocal.requestQueue(queueName).listHead();
@@ -742,21 +754,21 @@ describe('listHead', () => {
 
     describe('throws', () => {
         test('when queue does not exist', async () => {
-            const queueName = 'this-queue-does-not-exist'; // eslint-disable-line no-shadow
+            const nonExistantQueueName = 'this-queue-does-not-exist';
             try {
-                await storageLocal.requestQueue(queueName).listHead();
+                await storageLocal.requestQueue(nonExistantQueueName).listHead();
                 throw new Error('wrong-error');
             } catch (err) {
-                expect(err.message).toBe(`Request queue with id: ${queueName} does not exist.`);
+                expect(err.message).toBe(`Request queue with id: ${nonExistantQueueName} does not exist.`);
             }
         });
     });
 });
 
-function seed(requestQueuesDir, dbConnections) {
+function seed(requestQueuesDir: string, dbConnections: DatabaseConnectionCache) {
     Object.values(TEST_QUEUES).forEach((queue) => {
-        const queueDir = path.join(requestQueuesDir, queue.name);
-        fs.ensureDirSync(queueDir);
+        const queueDir = join(requestQueuesDir, queue.name);
+        ensureDirSync(queueDir);
 
         const emulator = new RequestQueueEmulator({ queueDir, dbConnections });
         const id = insertQueue(emulator.db, queue);
@@ -766,14 +778,14 @@ function seed(requestQueuesDir, dbConnections) {
     });
 }
 
-function insertQueue(db, queue) {
+function insertQueue(db: Database, queue: TestQueue) {
     return db.prepare(`
         INSERT INTO ${STORAGE_NAMES.REQUEST_QUEUES}(name, totalRequestCount)
         VALUES(?, ?)
-    `).run(queue.name, queue.requestCount).lastInsertRowid;
+    `).run(queue.name, queue.requestCount).lastInsertRowid.toString();
 }
 
-function insertRequests(db, models) {
+function insertRequests(db: Database, models: RequestModel[]) {
     const insert = db.prepare(`
         INSERT INTO ${REQUESTS_TABLE_NAME}(
             id, queueId, orderNo, url, uniqueKey, method, retryCount, json
@@ -785,7 +797,7 @@ function insertRequests(db, models) {
     models.forEach((model) => insert.run(model));
 }
 
-function createRequestModels(queueId, count) {
+function createRequestModels(queueId: string, count: number) {
     const requestModels = [];
     for (let i = 0; i < count; i++) {
         const request = numToRequest(i);
@@ -799,7 +811,7 @@ function createRequestModels(queueId, count) {
     return requestModels;
 }
 
-function numToRequest(num) {
+function numToRequest(num: number): RequestModel {
     const url = `https://example.com/${num}`;
     return {
         id: uniqueKeyToRequestId(url),
@@ -807,6 +819,8 @@ function numToRequest(num) {
         uniqueKey: url,
         method: 'GET',
         retryCount: 0,
+        // eslint-disable-next-line @typescript-eslint/ban-ts-comment -- Disable the rule
+        // @ts-ignore Honestly, this data doesn't seem used, but I'll need someone to explain it to me
         userData: {
             label: 'detail',
             foo: 'bar',
@@ -814,19 +828,14 @@ function numToRequest(num) {
     };
 }
 
-/**
- * @param {string} requestQueuesDir
- * @param {DatabaseConnectionCache} dbConnections
- * @return {{ queues, records }}
- */
-function createCounter(requestQueuesDir, dbConnections) {
+function createCounter(requestQueuesDir: string, dbConnections: DatabaseConnectionCache): Counter {
     return {
         queues() {
             let count = 0;
-            const queueFolders = fs.readdirSync(requestQueuesDir);
+            const queueFolders = readdirSync(requestQueuesDir);
             queueFolders.forEach((queueName) => {
                 const emulator = new RequestQueueEmulator({
-                    queueDir: path.join(requestQueuesDir, queueName),
+                    queueDir: join(requestQueuesDir, queueName),
                     dbConnections,
                 });
                 const selectQueueCount = emulator.db.prepare(`SELECT COUNT(*) FROM ${STORAGE_NAMES.REQUEST_QUEUES}`).pluck();
@@ -836,11 +845,13 @@ function createCounter(requestQueuesDir, dbConnections) {
             });
             return count;
         },
-        requests(queueName) {
-            const queueDir = path.join(requestQueuesDir, queueName);
+        requests(queueName: string) {
+            const queueDir = join(requestQueuesDir, queueName);
             const emulator = new RequestQueueEmulator({ queueDir, dbConnections });
             const selectRequestCount = emulator.db.prepare(`SELECT COUNT(*) FROM ${REQUESTS_TABLE_NAME} WHERE queueId = ${QUEUE_ID}`).pluck();
             return selectRequestCount.get();
         },
     };
 }
+
+type Counter = { queues(): number; requests(queueName: string): number; };

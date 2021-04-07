@@ -1,7 +1,7 @@
 const fs = require('fs-extra');
 const path = require('path');
-const ApifyStorageLocal = require('../src/index');
-const { STORAGE_NAMES } = require('../src/consts');
+const { ApifyStorageLocal } = require('../dist/index');
+const { STORAGE_NAMES } = require('../dist/consts');
 const { prepareTestDir, removeTestDir } = require('./_tools');
 
 const TEST_DATASETS = {
