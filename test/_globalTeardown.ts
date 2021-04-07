@@ -1,6 +1,6 @@
 import { removeSync } from 'fs-extra';
 import { TEMP_DIR } from './_tools';
 
-module.exports = () => {
+export default function globalTeardown(): void {
     removeSync(TEMP_DIR);
 };
