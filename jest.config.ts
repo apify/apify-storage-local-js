@@ -18,8 +18,8 @@ export default async (): Promise<Config.InitialOptions> => ({
         '!**/node_modules/**',
     ],
     maxWorkers: 3,
-    globalSetup: join(__dirname, 'test', '_globalSetup.js'),
-    globalTeardown: join(__dirname, 'test', '_globalTeardown.js'),
+    globalSetup: join(__dirname, 'test', '_globalSetup.ts'),
+    globalTeardown: join(__dirname, 'test', '_globalTeardown.ts'),
     globals: {
         'ts-jest': {
             tsconfig: '<rootDir>/test/tsconfig.json',

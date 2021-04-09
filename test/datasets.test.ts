@@ -1,8 +1,8 @@
-const fs = require('fs-extra');
-const path = require('path');
-const ApifyStorageLocal = require('../src/index');
-const { STORAGE_NAMES } = require('../src/consts');
-const { prepareTestDir, removeTestDir } = require('./_tools');
+import { emptyDirSync, ensureDirSync, readdirSync, readFile, writeJsonSync } from 'fs-extra';
+import { join } from 'path';
+import { ApifyStorageLocal } from '../src/index';
+import { STORAGE_NAMES } from '../src/consts';
+import { prepareTestDir, removeTestDir } from './_tools';
 
 const TEST_DATASETS = {
     1: {
@@ -15,19 +15,23 @@ const TEST_DATASETS = {
     },
 };
 
-/** @type ApifyStorageLocal */
-let storageLocal;
-let counter;
-let STORAGE_DIR;
-let datasetNameToDir;
+interface TestDataset {
+    name: string;
+    itemCount: number;
+}
+
+let STORAGE_DIR: string;
+let storageLocal: ApifyStorageLocal;
+let datasetNameToDir: (datasetName: string) => string;
+let counter: ReturnType<typeof createCounter>;
 beforeEach(() => {
     STORAGE_DIR = prepareTestDir();
     storageLocal = new ApifyStorageLocal({
         storageDir: STORAGE_DIR,
     });
-    const datasetsDir = path.join(STORAGE_DIR, STORAGE_NAMES.DATASETS);
-    datasetNameToDir = (datasetName) => {
-        return path.join(datasetsDir, datasetName);
+    const datasetsDir = join(STORAGE_DIR, STORAGE_NAMES.DATASETS);
+    datasetNameToDir = (datasetName: string) => {
+        return join(datasetsDir, datasetName);
     };
     counter = createCounter(datasetsDir);
     seed(datasetsDir);
@@ -38,7 +42,7 @@ afterAll(() => {
 });
 
 test('datasets directory exists', () => {
-    const subDirs = fs.readdirSync(STORAGE_DIR);
+    const subDirs = readdirSync(STORAGE_DIR);
     expect(subDirs).toContain(STORAGE_NAMES.DATASETS);
 });
 
@@ -48,26 +52,26 @@ describe('timestamps:', () => {
 
     test('createdAt has a valid date', async () => {
         await wait10ms();
-        const { createdAt } = await storageLocal.dataset(datasetName).get();
+        const { createdAt } = (await storageLocal.dataset(datasetName).get())!;
         const createdAtTimestamp = createdAt.getTime();
         expect(createdAtTimestamp).toBeGreaterThan(testInitTimestamp);
         expect(createdAtTimestamp).toBeLessThan(Date.now());
     });
 
     test('get updated on item insert', async () => {
-        const beforeUpdate = await storageLocal.dataset(datasetName).get();
+        const beforeUpdate = (await storageLocal.dataset(datasetName).get())!;
         await storageLocal.dataset(datasetName).pushItems({ foo: 'bar' });
         await wait10ms();
-        const afterUpdate = await storageLocal.dataset(datasetName).get();
+        const afterUpdate = (await storageLocal.dataset(datasetName).get())!;
         expect(afterUpdate.modifiedAt.getTime()).toBeGreaterThan(beforeUpdate.modifiedAt.getTime());
         expect(afterUpdate.accessedAt.getTime()).toBeGreaterThan(beforeUpdate.accessedAt.getTime());
     });
 
     test('listItems updates accessedAt', async () => {
-        const beforeGet = await storageLocal.dataset(datasetName).get();
+        const beforeGet = (await storageLocal.dataset(datasetName).get())!;
         await storageLocal.dataset(datasetName).listItems();
         await wait10ms();
-        const afterGet = await storageLocal.dataset(datasetName).get();
+        const afterGet = (await storageLocal.dataset(datasetName).get())!;
         expect(beforeGet.modifiedAt.getTime()).toBe(afterGet.modifiedAt.getTime());
         expect(afterGet.accessedAt.getTime()).toBeGreaterThan(beforeGet.accessedAt.getTime());
     });
@@ -75,10 +79,10 @@ describe('timestamps:', () => {
 
 describe('get dataset', () => {
     test('returns correct dataset', async () => {
-        let dataset = await storageLocal.dataset('first').get();
+        let dataset = (await storageLocal.dataset('first').get())!;
         expect(dataset.id).toBe('first');
         expect(dataset.name).toBe('first');
-        dataset = await storageLocal.dataset('second').get();
+        dataset = (await storageLocal.dataset('second').get())!;
         expect(dataset.id).toBe('second');
         expect(dataset.name).toBe('second');
     });
@@ -130,8 +134,8 @@ describe('pushItems', () => {
         await storageLocal.dataset(datasetName).pushItems(item);
         expect(counter.items(datasetName)).toBe(startCount + 1);
 
-        const itemPath = path.join(datasetNameToDir(datasetName), item.filename);
-        const savedJson = await fs.readFile(itemPath, 'utf8');
+        const itemPath = join(datasetNameToDir(datasetName), item.filename);
+        const savedJson = await readFile(itemPath, 'utf8');
         const savedItem = JSON.parse(savedJson);
         expect(savedItem).toEqual(item);
     });
@@ -147,8 +151,8 @@ describe('pushItems', () => {
         expect(counter.items(datasetName)).toBe(startCount + 20);
 
         for (const item of items) {
-            const itemPath = path.join(datasetNameToDir(datasetName), item.filename);
-            const savedJson = await fs.readFile(itemPath, 'utf8');
+            const itemPath = join(datasetNameToDir(datasetName), item.filename);
+            const savedJson = await readFile(itemPath, 'utf8');
             const savedItem = JSON.parse(savedJson);
             expect(savedItem).toEqual(item);
         }
@@ -160,8 +164,8 @@ describe('pushItems', () => {
         await storageLocal.dataset(datasetName).pushItems(JSON.stringify(item));
         expect(counter.items(datasetName)).toBe(startCount + 1);
 
-        const itemPath = path.join(datasetNameToDir(datasetName), item.filename);
-        const savedJson = await fs.readFile(itemPath, 'utf8');
+        const itemPath = join(datasetNameToDir(datasetName), item.filename);
+        const savedJson = await readFile(itemPath, 'utf8');
         const savedItem = JSON.parse(savedJson);
         expect(savedItem).toEqual(item);
     });
@@ -178,8 +182,8 @@ describe('pushItems', () => {
 
         for (const itemJson of itemJsons) {
             const item = JSON.parse(itemJson);
-            const itemPath = path.join(datasetNameToDir(datasetName), item.filename);
-            const savedJson = await fs.readFile(itemPath, 'utf8');
+            const itemPath = join(datasetNameToDir(datasetName), item.filename);
+            const savedJson = await readFile(itemPath, 'utf8');
             const savedItem = JSON.parse(savedJson);
             expect(savedItem).toEqual(item);
         }
@@ -198,8 +202,8 @@ describe('pushItems', () => {
         expect(counter.items(datasetName)).toBe(startCount + 20);
 
         for (const item of items) {
-            const itemPath = path.join(datasetNameToDir(datasetName), item.filename);
-            const savedJson = await fs.readFile(itemPath, 'utf8');
+            const itemPath = join(datasetNameToDir(datasetName), item.filename);
+            const savedJson = await readFile(itemPath, 'utf8');
             const savedItem = JSON.parse(savedJson);
             expect(savedItem).toEqual(item);
         }
@@ -217,7 +221,6 @@ describe('pushItems', () => {
         });
 
         test('when individual items are arrays', async () => {
-            const datasetName = 'first';
             const arrayOfArrays = [
                 { foo: 'bar' },
                 [{ one: 1 }, { two: 2 }],
@@ -225,6 +228,7 @@ describe('pushItems', () => {
 
             expect.hasAssertions();
             try {
+                // @ts-expect-error Making sure datasets only allow a single JSON object
                 await storageLocal.dataset(datasetName).pushItems(arrayOfArrays);
             } catch (err) {
                 expect(err.message).toMatch('Each dataset item can only be a single JSON object, not an array. Received:');
@@ -269,11 +273,11 @@ describe('listItems', () => {
     });
 });
 
-async function wait10ms() {
+function wait10ms() {
     return new Promise((r) => setTimeout(r, 10));
 }
 
-function seed(datasetsDir) {
+function seed(datasetsDir: string) {
     Object.values(TEST_DATASETS).forEach((dataset) => {
         const datasetDir = insertDataset(datasetsDir, dataset);
         const records = createItems(dataset);
@@ -281,21 +285,21 @@ function seed(datasetsDir) {
     });
 }
 
-function insertDataset(dir, dataset) {
-    const datasetDir = path.join(dir, dataset.name);
-    fs.ensureDirSync(datasetDir);
-    fs.emptyDirSync(datasetDir);
+function insertDataset(dir: string, dataset: TestDataset) {
+    const datasetDir = join(dir, dataset.name);
+    ensureDirSync(datasetDir);
+    emptyDirSync(datasetDir);
     return datasetDir;
 }
 
-function insertItems(dir, items) {
+function insertItems(dir: string, items: DatasetRecord[]) {
     items.forEach((item) => {
-        const filePath = path.join(dir, item.filename);
-        fs.writeJsonSync(filePath, item);
+        const filePath = join(dir, item.filename);
+        writeJsonSync(filePath, item);
     });
 }
 
-function createItems(dataset) {
+function createItems(dataset: TestDataset) {
     const records = [];
     for (let i = 1; i <= dataset.itemCount; i++) {
         const record = numToItem(i);
@@ -304,7 +308,16 @@ function createItems(dataset) {
     return records;
 }
 
-function numToItem(num) {
+interface DatasetRecord {
+    key: string;
+    value: string;
+    filename: string;
+    contentType: string;
+    size: number;
+    [K: string]: unknown;
+}
+
+function numToItem(num: number): DatasetRecord {
     const key = `object_${num}`;
     const paddedNum = `${num}`.padStart(9, '0');
     const filename = `${paddedNum}.json`;
@@ -318,13 +331,13 @@ function numToItem(num) {
     };
 }
 
-function createCounter(datasetsDir) {
+function createCounter(datasetsDir: string) {
     return {
         datasets() {
-            return fs.readdirSync(datasetsDir).length;
+            return readdirSync(datasetsDir).length;
         },
-        items(name) {
-            return fs.readdirSync(path.join(datasetsDir, name)).length;
+        items(name: string) {
+            return readdirSync(join(datasetsDir, name)).length;
         },
     };
 }

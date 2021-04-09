@@ -1,39 +1,73 @@
-const fs = require('fs-extra');
-const ow = require('ow').default;
-const path = require('path');
-const log = require('apify-shared/log');
-const { KEY_VALUE_STORE_KEYS } = require('apify-shared/consts');
-const { STORAGE_NAMES, STORAGE_TYPES } = require('./consts');
-const { DatabaseConnectionCache } = require('./database_connection_cache');
-const { DatasetClient } = require('./resource_clients/dataset');
-const { DatasetCollectionClient } = require('./resource_clients/dataset_collection');
-const { KeyValueStoreClient } = require('./resource_clients/key_value_store');
-const { KeyValueStoreCollectionClient } = require('./resource_clients/key_value_store_collection');
-const { RequestQueueClient } = require('./resource_clients/request_queue');
-const { RequestQueueCollectionClient } = require('./resource_clients/request_queue_collection');
+import { ensureDirSync, readdirSync } from 'fs-extra';
+import ow from 'ow';
+import { resolve } from 'path';
+import log from 'apify-shared/log';
+import { KEY_VALUE_STORE_KEYS } from 'apify-shared/consts';
+import { STORAGE_NAMES, STORAGE_TYPES } from './consts';
+import { DatabaseConnectionCache } from './database_connection_cache';
+import { DatasetClient } from './resource_clients/dataset';
+import { DatasetCollectionClient } from './resource_clients/dataset_collection';
+import { KeyValueStoreClient } from './resource_clients/key_value_store';
+import { KeyValueStoreCollectionClient } from './resource_clients/key_value_store_collection';
+import { RequestQueueClient } from './resource_clients/request_queue';
+import { RequestQueueCollectionClient } from './resource_clients/request_queue_collection';
 
 // Singleton cache to be shared across all ApifyStorageLocal instances
 // to make sure that multiple connections are not created to the same database.
 const databaseConnectionCache = new DatabaseConnectionCache();
 
-/**
- * @typedef {object} ApifyStorageLocalOptions
- * @property {string} [storageDir='./apify_storage']
- *  Path to directory with storages. If there are no storages yet,
- *  appropriate sub-directories will be created in this directory.
- * @property {boolean} [enableWalMode=true]
- *  SQLite WAL mode (instead of a rollback journal) is used by default for request queues, however, in some file systems it could behave weirdly.
- *  Setting this property to `false` will force the request queue database to use a rollback journal instead of WAL.
- */
+export interface ApifyStorageLocalOptions {
+    /**
+     * Path to directory with storages. If there are no storages yet,
+     * appropriate sub-directories will be created in this directory.
+     * @default './apify_storage'
+     */
+    storageDir?: string;
+
+    /**
+     * SQLite WAL mode (instead of a rollback journal) is used by default for request queues, however, in some file systems it could behave weirdly.
+     * Setting this property to `false` will force the request queue database to use a rollback journal instead of WAL.
+     * @default true
+     */
+    enableWalMode?: boolean;
+}
+
+export interface RequestQueueOptions {
+    clientKey?: string;
+}
 
 /**
  * Represents local emulation of [Apify Storage](https://apify.com/storage).
  */
-class ApifyStorageLocal {
+export class ApifyStorageLocal {
+    readonly storageDir: string;
+
+    readonly requestQueueDir: string;
+
+    readonly keyValueStoreDir: string;
+
+    readonly datasetDir: string;
+
+    readonly dbConnections = databaseConnectionCache;
+
+    readonly enableWalMode: boolean;
+
     /**
-     * @param {ApifyStorageLocalOptions} [options]
+     * DatasetClient keeps internal state: itemCount
+     * We need to keep a single client instance not to
+     * have different numbers across parallel clients.
      */
-    constructor(options = {}) {
+    readonly datasetClientCache = new Map<string, DatasetClient>();
+
+    // To prevent directories from being created immediately when
+    // an ApifyClient instance is constructed, we create them lazily.
+    private isRequestQueueDirInitialized = false;
+
+    private isKeyValueStoreDirInitialized = false;
+
+    private isDatasetDirInitialized = false;
+
+    constructor(options: ApifyStorageLocalOptions = {}) {
         ow(options, 'ApifyStorageLocalOptions', ow.optional.object.exactShape({
             storageDir: ow.optional.string,
             enableWalMode: ow.optional.boolean,
@@ -45,44 +79,22 @@ class ApifyStorageLocal {
         } = options;
 
         this.storageDir = storageDir;
-        this.requestQueueDir = path.resolve(storageDir, STORAGE_NAMES.REQUEST_QUEUES);
-        this.keyValueStoreDir = path.resolve(storageDir, STORAGE_NAMES.KEY_VALUE_STORES);
-        this.datasetDir = path.resolve(storageDir, STORAGE_NAMES.DATASETS);
-        this.dbConnections = databaseConnectionCache;
+        this.requestQueueDir = resolve(storageDir, STORAGE_NAMES.REQUEST_QUEUES);
+        this.keyValueStoreDir = resolve(storageDir, STORAGE_NAMES.KEY_VALUE_STORES);
+        this.datasetDir = resolve(storageDir, STORAGE_NAMES.DATASETS);
         this.enableWalMode = enableWalMode;
 
         this.dbConnections.setWalMode(this.enableWalMode);
-
-        /**
-         * DatasetClient keeps internal state: itemCount
-         * We need to keep a single client instance not to
-         * have different numbers across parallel clients.
-         * @type {Map<string, DatasetClient>}
-         */
-        this.datasetClientCache = new Map();
-
-        // To prevent directories from being created immediately when
-        // an ApifyClient instance is constructed, we create them lazily.
-        this.isRequestQueueDirInitialized = false;
-        this.isKeyValueStoreDirInitialized = false;
-        this.isDatasetDirInitialized = false;
     }
 
-    /**
-     * @return {DatasetCollectionClient}
-     */
-    datasets() {
+    datasets(): DatasetCollectionClient {
         this._ensureDatasetDir();
         return new DatasetCollectionClient({
             storageDir: this.datasetDir,
         });
     }
 
-    /**
-     * @param {string} id
-     * @return {DatasetClient}
-     */
-    dataset(id) {
+    dataset(id: string): DatasetClient {
         ow(id, ow.string);
         this._ensureDatasetDir();
         let client = this.datasetClientCache.get(id);
@@ -91,25 +103,19 @@ class ApifyStorageLocal {
                 name: id,
                 storageDir: this.datasetDir,
             });
+            this.datasetClientCache.set(id, client);
         }
         return client;
     }
 
-    /**
-     * @return {KeyValueStoreCollectionClient}
-     */
-    keyValueStores() {
+    keyValueStores(): KeyValueStoreCollectionClient {
         this._ensureKeyValueStoreDir();
         return new KeyValueStoreCollectionClient({
             storageDir: this.keyValueStoreDir,
         });
     }
 
-    /**
-     * @param {string} id
-     * @return {KeyValueStoreClient}
-     */
-    keyValueStore(id) {
+    keyValueStore(id: string): KeyValueStoreClient {
         ow(id, ow.string);
         this._ensureKeyValueStoreDir();
         return new KeyValueStoreClient({
@@ -118,10 +124,7 @@ class ApifyStorageLocal {
         });
     }
 
-    /**
-     * @return {RequestQueueCollectionClient}
-     */
-    requestQueues() {
+    requestQueues(): RequestQueueCollectionClient {
         this._ensureRequestQueueDir();
         return new RequestQueueCollectionClient({
             storageDir: this.requestQueueDir,
@@ -129,12 +132,7 @@ class ApifyStorageLocal {
         });
     }
 
-    /**
-     * @param {string} id
-     * @param {object} options
-     * @return {RequestQueueClient}
-     */
-    requestQueue(id, options = {}) {
+    requestQueue(id: string, options: RequestQueueOptions = {}): RequestQueueClient {
         ow(id, ow.string);
         // Matching the Client validation.
         ow(options, ow.object.exactShape({
@@ -148,49 +146,40 @@ class ApifyStorageLocal {
         });
     }
 
-    /**
-     * @private
-     */
-    _ensureDatasetDir() {
+    private _ensureDatasetDir() {
         if (!this.isDatasetDirInitialized) {
-            fs.ensureDirSync(this.datasetDir);
+            ensureDirSync(this.datasetDir);
             this._checkIfStorageIsEmpty(STORAGE_TYPES.DATASET, this.datasetDir);
             this.isDatasetDirInitialized = true;
         }
     }
 
-    /**
-     * @private
-     */
-    _ensureKeyValueStoreDir() {
+    private _ensureKeyValueStoreDir() {
         if (!this.isKeyValueStoreDirInitialized) {
-            fs.ensureDirSync(this.keyValueStoreDir);
+            ensureDirSync(this.keyValueStoreDir);
             this._checkIfStorageIsEmpty(STORAGE_TYPES.KEY_VALUE_STORE, this.keyValueStoreDir);
             this.isKeyValueStoreDirInitialized = true;
         }
     }
 
-    /**
-     * @private
-     */
-    _ensureRequestQueueDir() {
+    private _ensureRequestQueueDir() {
         if (!this.isRequestQueueDirInitialized) {
-            fs.ensureDirSync(this.requestQueueDir);
+            ensureDirSync(this.requestQueueDir);
             this._checkIfStorageIsEmpty(STORAGE_TYPES.REQUEST_QUEUE, this.requestQueueDir);
             this.isRequestQueueDirInitialized = true;
         }
     }
 
-    _checkIfStorageIsEmpty(storageType, storageDir) {
+    private _checkIfStorageIsEmpty(storageType: STORAGE_TYPES, storageDir: string) {
         const dirsWithPreviousState = [];
 
-        const dirents = fs.readdirSync(storageDir, { withFileTypes: true });
+        const dirents = readdirSync(storageDir, { withFileTypes: true });
         for (const dirent of dirents) {
             if (!dirent.isDirectory()) continue; // eslint-disable-line
 
-            const innerStorageDir = path.resolve(storageDir, dirent.name);
+            const innerStorageDir = resolve(storageDir, dirent.name);
 
-            let innerDirents = fs.readdirSync(innerStorageDir).filter((fileName) => !(/(^|\/)\.[^/.]/g).test(fileName));
+            let innerDirents = readdirSync(innerStorageDir).filter((fileName) => !(/(^|\/)\.[^/.]/g).test(fileName));
 
             if (storageType === STORAGE_TYPES.KEY_VALUE_STORE) {
                 innerDirents = innerDirents.filter((fileName) => !RegExp(KEY_VALUE_STORE_KEYS.INPUT).test(fileName));
@@ -209,6 +198,4 @@ class ApifyStorageLocal {
                 + `please clear the respective director${dirsNo === 1 ? 'y' : 'ies'} and re-start the actor.`);
         }
     }
-}
-
-module.exports = ApifyStorageLocal;
+};

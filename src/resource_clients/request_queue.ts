@@ -31,13 +31,14 @@ export interface QueueHead {
 }
 
 export interface RequestModel {
-    id: string;
+    id?: string;
     queueId: string;
     orderNo: number | null;
     url: string;
     uniqueKey: string;
     method?: string;
     retryCount?: number;
+    handledAt?: Date | string;
     json: string;
 }
 
@@ -204,7 +205,8 @@ export class RequestQueueClient {
         return this._getEmulator().updateRequest(requestModel);
     }
 
-    async deleteRequest(): Promise<never> {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    async deleteRequest(_id: string): Promise<never> {
         // TODO Deletion is done, but we also need to update request counts in a transaction.
         throw new Error('This method is not implemented in @apify/storage-local yet.');
     }
