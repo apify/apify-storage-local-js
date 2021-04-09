@@ -241,7 +241,7 @@ export class RequestQueueEmulator {
         return this._selectRequestOrderNoByModel.get(requestModel);
     }
 
-    selectRequestJsonByIdAndQueueId(requestId: string, queueId: string | number): string {
+    selectRequestJsonByIdAndQueueId(requestId: string, queueId: string): string {
         if (!this._selectRequestJsonByModel) {
             this._selectRequestJsonByModel = this.db.prepare(`
                 SELECT json FROM ${this.requestsTableName}
@@ -251,7 +251,7 @@ export class RequestQueueEmulator {
         return this._selectRequestJsonByModel.get(queueId, requestId);
     }
 
-    selectRequestJsonsByQueueIdWithLimit(queueId: string | number, limit: number): string[] {
+    selectRequestJsonsByQueueIdWithLimit(queueId: string, limit: number): string[] {
         if (!this._selectRequestJsonsByQueueIdWithLimit) {
             this._selectRequestJsonsByQueueIdWithLimit = this.db.prepare(`
                 SELECT json FROM ${this.requestsTableName}

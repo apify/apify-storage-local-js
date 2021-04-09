@@ -148,7 +148,7 @@ describe('timestamps:', () => {
         const beforeUpdate = selectTimestamps.get();
         const request = numToRequest(100);
         request.json = 'x';
-        request.queueId = QUEUE_ID;
+        request.queueId = `${QUEUE_ID}`;
         db.prepare(`
             INSERT INTO ${REQUESTS_TABLE_NAME}(queueId, id, url, uniqueKey, json)
             VALUES(:queueId, :id, :url, :uniqueKey, :json)
@@ -804,7 +804,7 @@ function createRequestModels(queueId: string | number, count: number) {
         requestModels.push({
             ...request,
             orderNo: i % 4 === 0 ? -i : i,
-            queueId,
+            queueId: `${queueId}`,
             json: JSON.stringify(request),
         });
     }
