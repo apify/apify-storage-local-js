@@ -195,7 +195,7 @@ export class ApifyStorageLocal {
             log.warning(`The following ${storageType} director${dirsNo === 1 ? 'y' : 'ies'} contain${dirsNo === 1 ? 's' : ''} a previous state:`
                 + `\n      ${dirsWithPreviousState.join('\n      ')}`
                 + '\n      If you did not intend to persist the state - '
-                + `please clear the respective director${dirsNo === 1 ? 'y' : 'ies'} and re-start the actor.`, undefined);
+                + `please clear the respective director${dirsNo === 1 ? 'y' : 'ies'} and re-start the actor.`);
         }
     }
 };
