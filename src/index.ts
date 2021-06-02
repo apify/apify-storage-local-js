@@ -1,8 +1,8 @@
 import { ensureDirSync, readdirSync } from 'fs-extra';
 import ow from 'ow';
 import { resolve } from 'path';
-import log from 'apify-shared/log';
-import { KEY_VALUE_STORE_KEYS } from 'apify-shared/consts';
+import log from '@apify/log';
+import { KEY_VALUE_STORE_KEYS } from '@apify/consts';
 import { STORAGE_NAMES, STORAGE_TYPES } from './consts';
 import { DatabaseConnectionCache } from './database_connection_cache';
 import { DatasetClient } from './resource_clients/dataset';

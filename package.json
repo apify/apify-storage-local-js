@@ -50,8 +50,9 @@
         "build:watch": "tsc -b src -w"
     },
     "dependencies": {
-        "apify-shared": "^0.7.5",
-        "better-sqlite3-with-prebuilds": "7.1.8",
+        "@apify/consts": "^1.0.0",
+        "@apify/log": "^1.0.0",
+        "better-sqlite3-with-prebuilds": "^7.1.8",
         "content-type": "^1.0.4",
         "fs-extra": "^9.1.0",
         "mime-types": "^2.1.30",

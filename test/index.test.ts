@@ -1,4 +1,4 @@
-import log from 'apify-shared/log';
+import log from '@apify/log';
 import { join } from 'path';
 import { ensureDirSync, statSync, writeFileSync } from 'fs-extra';
 import { ApifyStorageLocal } from '../src/index';
