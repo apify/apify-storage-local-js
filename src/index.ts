@@ -34,6 +34,7 @@ export interface ApifyStorageLocalOptions {
 
 export interface RequestQueueOptions {
     clientKey?: string;
+    timeoutSecs?: number;
 }
 
 /**
@@ -137,6 +138,7 @@ export class ApifyStorageLocal {
         // Matching the Client validation.
         ow(options, ow.object.exactShape({
             clientKey: ow.optional.string,
+            timeoutSecs: ow.optional.number,
         }));
         this._ensureRequestQueueDir();
         return new RequestQueueClient({
