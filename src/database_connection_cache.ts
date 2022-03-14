@@ -59,6 +59,7 @@ export class DatabaseConnectionCache {
     // }
 
     setWalMode(enableWalMode: boolean): void {
+        if(this.enableWalMode === enableWalMode) return;
         if (this.connections.size) {
             throw new Error(`Cannot ${enableWalMode ? 'enable' : 'disable'} WAL mode while there are open database connections`);
         }
