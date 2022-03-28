@@ -4,7 +4,7 @@ import { join } from 'path';
 import type { Database, Statement } from 'better-sqlite3-with-prebuilds';
 import { ApifyStorageLocal } from '../src/index';
 import { STORAGE_NAMES, DATABASE_FILE_NAME } from '../src/consts';
-import { RequestQueueEmulator } from '../src/emulators/request_queue_emulator';
+import { BatchAddRequestsResult, RequestQueueEmulator } from '../src/emulators/request_queue_emulator';
 import { uniqueKeyToRequestId } from '../src/utils';
 import { prepareTestDir, removeTestDir } from './_tools';
 import type { DatabaseConnectionCache } from '../src/database_connection_cache';
@@ -500,6 +500,212 @@ describe('addRequest', () => {
             const nonExistantQueueName = 'this-queue-does-not-exist';
             try {
                 await storageLocal.requestQueue(nonExistantQueueName).addRequest(throwRequest);
+                throw new Error('wrong-error');
+            } catch (err) {
+                expect(err.message).toBe(`Request queue with id: ${nonExistantQueueName} does not exist.`);
+            }
+        });
+    });
+});
+
+describe('batchAddRequests', () => {
+    const queueName = 'first';
+    const startCount = TEST_QUEUES[1].requestCount;
+
+    let db: Database;
+    let request: RequestModel;
+    let requestId: string;
+    beforeEach(() => {
+        db = queueNameToDb(queueName);
+        request = numToRequest(1);
+        requestId = request.id!;
+        request.id = undefined;
+    });
+
+    test('adds requests', async () => { /* eslint-disable no-shadow */
+        const newRequest1 = numToRequest(startCount + 1);
+        const newRequestId1 = newRequest1.id!;
+        newRequest1.id = undefined;
+
+        const newRequest2 = numToRequest(startCount + 2);
+        const newRequestId2 = newRequest2.id!;
+        newRequest2.id = undefined;
+
+        const queueOperationInfo = await storageLocal.requestQueue(queueName).batchAddRequests([newRequest1, newRequest2]);
+        expect(queueOperationInfo).toEqual<BatchAddRequestsResult>({
+            processedRequests: [
+                {
+                    uniqueKey: newRequest1.uniqueKey,
+                    requestId: newRequestId1,
+                    wasAlreadyPresent: false,
+                    wasAlreadyHandled: false,
+                },
+                {
+                    uniqueKey: newRequest2.uniqueKey,
+                    requestId: newRequestId2,
+                    wasAlreadyPresent: false,
+                    wasAlreadyHandled: false,
+                },
+            ],
+            unprocessedRequests: [],
+        });
+        expect(counter.requests(queueName)).toBe(startCount + 2);
+
+        const requestModel1 = db.prepare(`
+            SELECT * FROM ${REQUESTS_TABLE_NAME}
+            WHERE queueId = ${QUEUE_ID} AND id = ?
+        `).get(newRequestId1);
+        expect(requestModel1.queueId).toBe(QUEUE_ID);
+        expect(requestModel1.id).toBe(newRequestId1);
+        expect(requestModel1.url).toBe(newRequest1.url);
+        expect(requestModel1.uniqueKey).toBe(newRequest1.uniqueKey);
+        expect(requestModel1.retryCount).toBe(0);
+        expect(requestModel1.method).toBe('GET');
+        expect(typeof requestModel1.orderNo).toBe('number');
+
+        const savedRequest1 = JSON.parse(requestModel1.json);
+        expect(savedRequest1.id).toBe(newRequestId1);
+        expect(savedRequest1).toMatchObject({ ...newRequest1, id: newRequestId1 });
+
+        const requestModel2 = db.prepare(`
+            SELECT * FROM ${REQUESTS_TABLE_NAME}
+            WHERE queueId = ${QUEUE_ID} AND id = ?
+        `).get(newRequestId2);
+        expect(requestModel2.queueId).toBe(QUEUE_ID);
+        expect(requestModel2.id).toBe(newRequestId2);
+        expect(requestModel2.url).toBe(newRequest2.url);
+        expect(requestModel2.uniqueKey).toBe(newRequest2.uniqueKey);
+        expect(requestModel2.retryCount).toBe(0);
+        expect(requestModel2.method).toBe('GET');
+        expect(typeof requestModel2.orderNo).toBe('number');
+
+        const savedRequest2 = JSON.parse(requestModel2.json);
+        expect(savedRequest2.id).toBe(newRequestId2);
+        expect(savedRequest2).toMatchObject({ ...newRequest2, id: newRequestId2 });
+    });
+
+    test('succeeds when request is already present', async () => {
+        const queueOperationInfo = await storageLocal.requestQueue(queueName).batchAddRequests([request]);
+        expect(queueOperationInfo).toEqual<BatchAddRequestsResult>({
+            processedRequests: [],
+            unprocessedRequests: [{
+                uniqueKey: uniqueKeyToRequestId(request.url),
+                url: request.url,
+                method: request.method,
+            }],
+        });
+        expect(counter.requests(queueName)).toBe(startCount);
+    });
+
+    test('does not update request values when present', async () => {
+        const newRequest = {
+            ...request,
+            handledAt: new Date(),
+            method: 'POST',
+        };
+
+        await storageLocal.requestQueue(queueName).batchAddRequests([newRequest]);
+        const requestModel = db.prepare(`
+            SELECT * FROM ${REQUESTS_TABLE_NAME}
+            WHERE queueId = ${QUEUE_ID} AND id = ?
+        `).get(requestId);
+        expect(requestModel.id).toBe(requestId);
+        expect(requestModel.method).toBe('GET');
+        expect(typeof requestModel.orderNo).toBe('number');
+
+        const savedRequest = JSON.parse(requestModel.json);
+        expect(savedRequest.id).toBe(requestId);
+        expect(savedRequest).toMatchObject({ ...request, id: requestId });
+    });
+
+    test('succeeds when request is already handled', async () => {
+        markRequestHandled(db, requestId);
+
+        const queueOperationInfo = await storageLocal.requestQueue(queueName).batchAddRequests([request]);
+        expect(queueOperationInfo).toEqual<BatchAddRequestsResult>({
+            processedRequests: [],
+            unprocessedRequests: [{
+                uniqueKey: uniqueKeyToRequestId(request.url),
+                url: request.url,
+                method: request.method,
+            }],
+        });
+        expect(counter.requests(queueName)).toBe(startCount);
+    });
+
+    test('returns wasAlreadyHandled: false when request is added handled', async () => {
+        request.handledAt = new Date();
+
+        const queueOperationInfo = await storageLocal.requestQueue(queueName).batchAddRequests([request]);
+        expect(queueOperationInfo).toEqual<BatchAddRequestsResult>({
+            processedRequests: [],
+            unprocessedRequests: [{
+                uniqueKey: uniqueKeyToRequestId(request.url),
+                url: request.url,
+                method: request.method,
+            }],
+        });
+        expect(counter.requests(queueName)).toBe(startCount);
+    });
+
+    test('forefront adds requests to queue head', async () => { /* eslint-disable no-shadow */
+        const newRequest1 = numToRequest(startCount + 1);
+        const newRequestId1 = newRequest1.id;
+        newRequest1.id = undefined;
+
+        const newRequest2 = numToRequest(startCount + 2);
+        newRequest2.id = undefined;
+
+        await storageLocal.requestQueue(queueName).batchAddRequests([newRequest1, newRequest2], { forefront: true });
+        expect(counter.requests(queueName)).toBe(startCount + 2);
+        const firstId = db.prepare(`
+            SELECT id FROM ${REQUESTS_TABLE_NAME}
+            WHERE queueId = ${QUEUE_ID} AND orderNo IS NOT NULL
+            LIMIT 1
+        `).pluck().get();
+        expect(firstId).toBe(newRequestId1);
+    });
+
+    describe('throws', () => {
+        let throwRequest: RequestModel;
+        beforeEach(() => {
+            throwRequest = numToRequest(startCount + 1);
+            throwRequest.id = undefined;
+        });
+
+        test('on missing url', async () => {
+            Reflect.deleteProperty(throwRequest, 'url');
+
+            try {
+                await storageLocal.requestQueue(queueName).batchAddRequests([throwRequest]);
+                throw new Error('wrong-error');
+            } catch (err) {
+                expect(err).toBeInstanceOf(ArgumentError);
+            }
+        });
+        test('on missing uniqueKey', async () => {
+            Reflect.deleteProperty(throwRequest, 'uniqueKey');
+
+            try {
+                await storageLocal.requestQueue(queueName).batchAddRequests([throwRequest]);
+                throw new Error('wrong-error');
+            } catch (err) {
+                expect(err).toBeInstanceOf(ArgumentError);
+            }
+        });
+        test('when id is provided', async () => {
+            throwRequest.id = uniqueKeyToRequestId(throwRequest.uniqueKey);
+            try {
+                await storageLocal.requestQueue(queueName).batchAddRequests([throwRequest]);
+                throw new Error('wrong-error');
+            } catch (err) {
+                expect(err).toBeInstanceOf(ArgumentError);
+            }
+        });
+        test('when queue does not exist', async () => {
+            const nonExistantQueueName = 'this-queue-does-not-exist';
+            try {
+                await storageLocal.requestQueue(nonExistantQueueName).batchAddRequests([throwRequest]);
                 throw new Error('wrong-error');
             } catch (err) {
                 expect(err.message).toBe(`Request queue with id: ${nonExistantQueueName} does not exist.`);
