@@ -1,4 +1,4 @@
-import { ensureDirSync, readdirSync } from 'fs-extra';
+import { ensureDirSync, pathExistsSync, readdirSync } from 'fs-extra';
 import ow from 'ow';
 import { resolve } from 'path';
 import log from '@apify/log';
@@ -74,10 +74,19 @@ export class ApifyStorageLocal {
             enableWalMode: ow.optional.boolean,
         }));
 
-        const {
-            storageDir = './apify_storage',
-            enableWalMode = true,
-        } = options;
+        /**
+         * Returns the first argument which is not `undefined`.
+         * If all the arguments are `undefined`, returns `undefined` (but the type is `never`).
+         */
+        const bool = (val?: string) => (val == null ? val : !['false', '0', ''].includes(val.toLowerCase()));
+        const storageDir = process.env.APIFY_LOCAL_STORAGE_DIR ?? options.storageDir ?? './apify_storage';
+        const enableWalMode = bool(process.env.APIFY_LOCAL_STORAGE_ENABLE_WAL_MODE) ?? options.enableWalMode ?? true;
+
+        if (!pathExistsSync(storageDir)) {
+            // eslint-disable-next-line max-len
+            log.info(`Created a data storage folder at ${storageDir}. You can override the path by setting the APIFY_LOCAL_STORAGE_DIR environment variable`);
+            ensureDirSync(storageDir);
+        }
 
         this.storageDir = storageDir;
         this.requestQueueDir = resolve(storageDir, STORAGE_NAMES.REQUEST_QUEUES);

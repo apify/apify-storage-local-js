@@ -6,6 +6,7 @@ import { STORAGE_NAMES } from '../src/consts';
 import { prepareTestDir, removeTestDir } from './_tools';
 
 let STORAGE_DIR: string;
+
 beforeEach(() => {
     STORAGE_DIR = prepareTestDir();
 });
@@ -40,6 +41,33 @@ test('creates folders lazily', () => {
     for (const dir of [requestQueueDir, keyValueStoreDir, datasetDir]) {
         expect(statSync(dir).isDirectory()).toBe(true);
     }
+});
+
+test('reads env vars', () => {
+    const envVars = { ...process.env };
+
+    process.env = {
+        APIFY_LOCAL_STORAGE_DIR: STORAGE_DIR,
+        APIFY_LOCAL_STORAGE_ENABLE_WAL_MODE: 'false',
+    };
+
+    const storageLocal = new ApifyStorageLocal({
+        storageDir: `not_a_${STORAGE_DIR}`,
+        enableWalMode: true,
+    });
+
+    const requestQueueDir = join(STORAGE_DIR, STORAGE_NAMES.REQUEST_QUEUES);
+    storageLocal.requestQueues();
+    const keyValueStoreDir = join(STORAGE_DIR, STORAGE_NAMES.KEY_VALUE_STORES);
+    storageLocal.keyValueStores();
+    const datasetDir = join(STORAGE_DIR, STORAGE_NAMES.DATASETS);
+    storageLocal.datasets();
+    for (const dir of [requestQueueDir, keyValueStoreDir, datasetDir]) {
+        expect(statSync(dir).isDirectory()).toBe(true);
+    }
+    expect(storageLocal.enableWalMode).toBeFalsy();
+
+    process.env = { ...envVars };
 });
 
 test('warning is shown when storage is non-empty', () => {
