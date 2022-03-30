@@ -465,5 +465,5 @@ export class RequestQueueEmulator {
 
 export interface BatchAddRequestsResult {
     processedRequests: ProcessedRequest[];
-    unprocessedRequests: UnprocessedRequest[]
+    unprocessedRequests: UnprocessedRequest[];
 }
