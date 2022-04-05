@@ -405,7 +405,7 @@ describe('addRequest', () => {
             ...request,
             handledAt: new Date(),
             method: 'POST',
-        };
+        } as const;
 
         await storageLocal.requestQueue(queueName).addRequest(newRequest);
         const requestModel = db.prepare(`
@@ -602,7 +602,7 @@ describe('batchAddRequests', () => {
             ...request,
             handledAt: new Date(),
             method: 'POST',
-        };
+        } as const;
 
         await storageLocal.requestQueue(queueName).batchAddRequests([newRequest]);
         const requestModel = db.prepare(`

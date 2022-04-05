@@ -14,11 +14,13 @@ const requestShape = {
     handledAt: ow.optional.any(ow.string.date, ow.date),
 };
 
+export type AllowedHttpMethods = 'GET' | 'HEAD' | 'POST' | 'PUT' | 'DELETE' | 'TRACE' | 'OPTIONS' | 'CONNECT' | 'PATCH';
+
 export interface RequestBody {
     id?: string;
     url: string;
     uniqueKey: string;
-    method?: string;
+    method?: AllowedHttpMethods;
     retryCount?: number;
     handledAt?: Date | string;
 }
@@ -36,7 +38,7 @@ export interface RequestModel {
     orderNo: number | null;
     url: string;
     uniqueKey: string;
-    method?: string;
+    method?: AllowedHttpMethods;
     retryCount?: number;
     handledAt?: Date | string;
     json: string;
