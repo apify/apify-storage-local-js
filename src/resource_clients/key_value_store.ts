@@ -93,14 +93,14 @@ export class KeyValueStoreClient {
         return undefined;
     }
 
-    async update(newFields: KeyValueStoreClientUpdateOptions): Promise<void> {
+    async update(newFields: KeyValueStoreClientUpdateOptions): Promise<Record<string, unknown>> {
         // The validation is intentionally loose to prevent issues
         // when swapping to a remote storage in production.
         ow(newFields, ow.object.partialShape({
             name: ow.optional.string.minLength(1),
         }));
 
-        if (!newFields.name) return;
+        if (!newFields.name) return {};
 
         const newPath = join(dirname(this.storeDir), newFields.name);
         try {
@@ -115,6 +115,8 @@ export class KeyValueStoreClient {
             }
         }
         this.name = newFields.name;
+
+        return { name: this.name };
     }
 
     async delete(): Promise<void> {
