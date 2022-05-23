@@ -37,11 +37,12 @@ export interface DatasetClientListOptions {
 }
 
 export interface PaginationList {
-    items?: Record<string, unknown>[];
+    items: Record<string, unknown>[];
     total: number;
     offset: number;
     count: number;
-    limit?: number;
+    limit: number;
+    desc?: boolean;
 }
 
 export class DatasetClient {
