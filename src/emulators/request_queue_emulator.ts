@@ -30,6 +30,17 @@ export interface RawQueueTableData {
     pendingRequestCount: number;
 }
 
+export interface RequestQueueInfo {
+    id: string;
+    name: string;
+    createdAt: Date;
+    modifiedAt: Date;
+    accessedAt: Date;
+    totalRequestCount: number;
+    handledRequestCount: number;
+    pendingRequestCount: number;
+}
+
 export interface RawRequestsTableData {
     queueId: string;
     id: string;
@@ -343,8 +354,8 @@ export class RequestQueueEmulator {
                 for (const model of models) {
                     try {
                         this.insertRequestByModel(model);
-                        const handledCountAdjustment = model.orderNo === null ? 1 : 0;
-                        this.adjustTotalAndHandledRequestCounts(model.queueId, 1, handledCountAdjustment);
+                        const handledCountAdjustment = model.orderNo == null ? 1 : 0;
+                        this.adjustTotalAndHandledRequestCounts(model.queueId!, 1, handledCountAdjustment);
                         // We return wasAlreadyHandled: false even though the request may
                         // have been added as handled, because that's how API behaves.
                         result.processedRequests.push(new ProcessedRequest(model.id!, model.uniqueKey));

@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import ow from 'ow';
 import { REQUEST_ID_LENGTH } from './consts';
+import { RawQueueTableData, RequestQueueInfo } from './emulators/request_queue_emulator';
 
 /**
  * Removes all properties with a null value
@@ -17,16 +18,35 @@ export function purgeNullsFromObject<T>(object: T): T {
 }
 
 /**
+ * Converts date strings to date objects and adds `id` alias for `name`.
+ */
+export function mapRawDataToRequestQueueInfo(raw?: RawQueueTableData): RequestQueueInfo | undefined {
+    if (!raw) {
+        return raw;
+    }
+
+    const queue: RequestQueueInfo = {
+        ...raw,
+        id: raw.name,
+        createdAt: new Date(raw.createdAt),
+        accessedAt: new Date(raw.accessedAt),
+        modifiedAt: new Date(raw.modifiedAt),
+    };
+
+    return purgeNullsFromObject(queue);
+}
+
+/**
  * Creates a standard request ID (same as Platform).
  */
 export function uniqueKeyToRequestId(uniqueKey: string): string {
     const str = createHash('sha256')
         .update(uniqueKey)
         .digest('base64')
-        .replace(/(\+|\/|=)/g, '');
+        .replace(/([+/=])/g, '');
 
     return str.length > REQUEST_ID_LENGTH ? str.substr(0, REQUEST_ID_LENGTH) : str;
-};
+}
 
 export function isBuffer(value: unknown): boolean {
     return ow.isValid(value, ow.any(ow.buffer, ow.arrayBuffer, ow.typedArray));

@@ -2,8 +2,8 @@ import { join, dirname } from 'path';
 import ow from 'ow';
 import { move, remove } from 'fs-extra';
 import type { DatabaseConnectionCache } from '../database_connection_cache';
-import { BatchAddRequestsResult, RawQueueTableData, RequestQueueEmulator } from '../emulators/request_queue_emulator';
-import { purgeNullsFromObject, uniqueKeyToRequestId } from '../utils';
+import { BatchAddRequestsResult, RequestQueueInfo, RequestQueueEmulator } from '../emulators/request_queue_emulator';
+import { mapRawDataToRequestQueueInfo, purgeNullsFromObject, uniqueKeyToRequestId } from '../utils';
 import type { QueueOperationInfo } from '../emulators/queue_operation_info';
 
 const requestShape = {
@@ -25,23 +25,31 @@ export interface RequestBody {
     handledAt?: Date | string;
 }
 
+export interface RequestQueueHeadItem {
+    id: string;
+    retryCount: number;
+    uniqueKey: string;
+    url: string;
+    method: AllowedHttpMethods;
+}
+
 export interface QueueHead {
     limit: number;
     queueModifiedAt: Date;
     hadMultipleClients: boolean;
-    items: unknown[];
+    items: RequestQueueHeadItem[];
 }
 
 export interface RequestModel {
     id?: string;
-    queueId: string;
-    orderNo: number | null;
+    queueId?: string;
+    orderNo?: number | null;
     url: string;
     uniqueKey: string;
     method?: AllowedHttpMethods;
     retryCount?: number;
     handledAt?: Date | string;
-    json: string;
+    json?: string;
 }
 
 export interface RequestQueueClientOptions {
@@ -97,7 +105,7 @@ export class RequestQueueClient {
         return this.emulator;
     }
 
-    async get(): Promise<RawQueueTableData | undefined> {
+    async get(): Promise<RequestQueueInfo | undefined> {
         let queue;
         try {
             this._getEmulator().updateAccessedAtById(this.id);
@@ -107,14 +115,13 @@ export class RequestQueueClient {
         }
 
         if (queue) {
-            queue.id = queue.name;
-            return purgeNullsFromObject(queue);
+            return mapRawDataToRequestQueueInfo(queue);
         }
 
         return undefined;
     }
 
-    async update(newFields: { name?: string; }): Promise<RawQueueTableData | undefined> {
+    async update(newFields: { name?: string; }): Promise<RequestQueueInfo | undefined> {
         // The validation is intentionally loose to prevent issues
         // when swapping to a remote queue in production.
         ow(newFields, ow.object.partialShape({
@@ -142,8 +149,7 @@ export class RequestQueueClient {
         this._getEmulator().updateNameById(this.id, newFields.name);
         this._getEmulator().updateModifiedAtById(this.id);
         const queue = this._getEmulator().selectById(this.id);
-        queue.id = queue.name;
-        return purgeNullsFromObject(queue);
+        return mapRawDataToRequestQueueInfo(queue);
     }
 
     async delete(): Promise<void> {

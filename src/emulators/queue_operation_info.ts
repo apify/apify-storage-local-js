@@ -1,6 +1,5 @@
 export class QueueOperationInfo {
     wasAlreadyPresent: boolean;
-
     wasAlreadyHandled: boolean;
 
     constructor(public requestId: string, requestOrderNo?: number | null) {
