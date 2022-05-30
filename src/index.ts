@@ -1,8 +1,9 @@
-import { ensureDirSync, pathExistsSync, readdirSync } from 'fs-extra';
+import { ensureDirSync, pathExists, pathExistsSync, readdirSync } from 'fs-extra';
 import ow from 'ow';
-import { resolve } from 'path';
+import { readdir, rm } from 'fs/promises';
+import { join, resolve } from 'path';
 import log from '@apify/log';
-import { KEY_VALUE_STORE_KEYS } from '@apify/consts';
+import { ENV_VARS, KEY_VALUE_STORE_KEYS, LOCAL_ENV_VARS } from '@apify/consts';
 import { STORAGE_NAMES, STORAGE_TYPES } from './consts';
 import { DatabaseConnectionCache } from './database_connection_cache';
 import { DatasetClient } from './resource_clients/dataset';
@@ -157,6 +158,42 @@ export class ApifyStorageLocal {
         });
     }
 
+    /**
+     * Cleans up the default local storage directories before the run starts:
+     *  - local directory containing the default dataset;
+     *  - all records from the default key-value store in the local directory, except for the "INPUT" key;
+     *  - local directory containing the default request queue.
+     */
+    async purge(): Promise<void> {
+        const defaultDatasetPath = resolve(this.datasetDir, LOCAL_ENV_VARS[ENV_VARS.DEFAULT_DATASET_ID]);
+        await this.removeFiles(defaultDatasetPath);
+
+        const defaultKeyValueStorePath = resolve(this.keyValueStoreDir, LOCAL_ENV_VARS[ENV_VARS.DEFAULT_KEY_VALUE_STORE_ID]);
+        await this.removeFiles(defaultKeyValueStorePath);
+
+        const defaultRequestQueuePath = resolve(this.requestQueueDir, LOCAL_ENV_VARS[ENV_VARS.DEFAULT_REQUEST_QUEUE_ID]);
+        await this.removeFiles(defaultRequestQueuePath);
+    }
+
+    private async removeFiles(folder: string): Promise<void> {
+        const storagePathExists = await pathExists(folder);
+
+        if (storagePathExists) {
+            const direntNames = await readdir(folder);
+            const deletePromises = [];
+
+            for (const direntName of direntNames) {
+                const fileName = join(folder, direntName);
+
+                if (!new RegExp(KEY_VALUE_STORE_KEYS.INPUT).test(fileName)) {
+                    deletePromises.push(rm(fileName, { recursive: true, force: true }));
+                }
+            }
+
+            await Promise.all(deletePromises);
+        }
+    }
+
     private _ensureDatasetDir() {
         if (!this.isDatasetDirInitialized) {
             ensureDirSync(this.datasetDir);
@@ -209,4 +246,4 @@ export class ApifyStorageLocal {
                 + `please clear the respective director${dirsNo === 1 ? 'y' : 'ies'} and re-start the actor.`);
         }
     }
-};
+}

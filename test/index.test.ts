@@ -1,7 +1,8 @@
 import log from '@apify/log';
-import { join } from 'path';
-import { ensureDirSync, statSync, writeFileSync } from 'fs-extra';
-import { ApifyStorageLocal } from '../src/index';
+import { join, resolve } from 'path';
+import { readdirSync } from 'fs';
+import { ensureDir, ensureDirSync, statSync, writeFile, writeFileSync } from 'fs-extra';
+import { ApifyStorageLocal } from '../src';
 import { STORAGE_NAMES } from '../src/consts';
 import { prepareTestDir, removeTestDir } from './_tools';
 
@@ -28,19 +29,38 @@ test('does not create folders immediately', () => {
     }
 });
 
-test('creates folders lazily', () => {
-    const storageLocal = new ApifyStorageLocal({
+test('creates folders lazily + purging', async () => {
+    const storage = new ApifyStorageLocal({
         storageDir: STORAGE_DIR,
     });
     const requestQueueDir = join(STORAGE_DIR, STORAGE_NAMES.REQUEST_QUEUES);
-    storageLocal.requestQueues();
+    storage.requestQueues();
     const keyValueStoreDir = join(STORAGE_DIR, STORAGE_NAMES.KEY_VALUE_STORES);
-    storageLocal.keyValueStores();
+    storage.keyValueStores();
     const datasetDir = join(STORAGE_DIR, STORAGE_NAMES.DATASETS);
-    storageLocal.datasets();
+    storage.datasets();
+
     for (const dir of [requestQueueDir, keyValueStoreDir, datasetDir]) {
         expect(statSync(dir).isDirectory()).toBe(true);
+
+        const storagePath = resolve(dir, 'default');
+        await ensureDir(storagePath);
+
+        const fileData = JSON.stringify({ foo: 'bar' });
+        await writeFile(join(storagePath, '000000001.json'), fileData);
+
+        if (dir === keyValueStoreDir) {
+            await writeFile(join(storagePath, 'INPUT.json'), fileData);
+        }
     }
+
+    await storage.purge();
+
+    // default storages should be empty, except INPUT.json file
+    expect(readdirSync(join(datasetDir, 'default')).length).toBe(0);
+    expect(readdirSync(join(keyValueStoreDir, 'default')).length).toBe(1);
+    expect(readdirSync(join(keyValueStoreDir, 'default'))[0]).toBe('INPUT.json');
+    expect(readdirSync(join(requestQueueDir, 'default')).length).toBe(0);
 });
 
 test('reads env vars', () => {
