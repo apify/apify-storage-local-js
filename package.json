@@ -33,7 +33,7 @@
         "url": "git+https://github.com/apify/apify-storage-local-js"
     },
     "bugs": {
-        "url": "https://github.com/apify/apify-client-local/issues"
+        "url": "https://github.com/apify/apify-storage-local-js/issues"
     },
     "homepage": "https://sdk.apify.com/",
     "files": [
