@@ -1,3 +1,4 @@
+import type { Readable } from 'node:stream';
 import { createHash } from 'crypto';
 import ow from 'ow';
 import { REQUEST_ID_LENGTH } from './consts';
@@ -52,6 +53,6 @@ export function isBuffer(value: unknown): boolean {
     return ow.isValid(value, ow.any(ow.buffer, ow.arrayBuffer, ow.typedArray));
 }
 
-export function isStream(value: unknown): boolean {
+export function isStream(value: unknown): value is Readable {
     return ow.isValid(value, ow.object.hasKeys('on', 'pipe'));
 }
