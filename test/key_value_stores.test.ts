@@ -237,6 +237,20 @@ describe('getRecord', () => {
         expect(record).toEqual(expectedRecord);
     });
 
+    test('parses JSON5', async () => {
+        await storageLocal.keyValueStore(storeName).setRecord({
+            key: 'json5',
+            value: `{ hello: 'world' }`,
+            contentType: 'application/json',
+        });
+
+        const record = await storageLocal.keyValueStore(storeName).getRecord('json5');
+
+        expect(record?.value).toStrictEqual({
+            hello: 'world',
+        });
+    });
+
     test('returns buffer when selected', async () => {
         const savedRecord = numToRecord(1);
         const expectedRecord = stripRecord(savedRecord);
