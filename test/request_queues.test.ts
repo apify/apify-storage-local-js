@@ -1,3 +1,4 @@
+import { setTimeout } from 'timers/promises';
 import { ensureDirSync, readdirSync } from 'fs-extra';
 import { ArgumentError } from 'ow';
 import { join } from 'path';
@@ -131,9 +132,10 @@ describe('timestamps:', () => {
         expect(createdAtTimestamp).toBeLessThan(Date.now());
     });
 
-    test('get updated on request UPDATE', () => {
+    test('get updated on request UPDATE', async () => {
         const beforeUpdate = selectTimestamps.get();
         const request = numToRequest(1);
+        await setTimeout(1);
         db.prepare(`
             UPDATE ${REQUESTS_TABLE_NAME}
             SET retryCount = 10
@@ -144,11 +146,12 @@ describe('timestamps:', () => {
         expect(new Date(afterUpdate.accessedAt).getTime()).toBeGreaterThan(new Date(beforeUpdate.accessedAt).getTime());
     });
 
-    test('get updated on request INSERT', () => {
+    test('get updated on request INSERT', async () => {
         const beforeUpdate = selectTimestamps.get();
         const request = numToRequest(100);
         request.json = 'x';
         request.queueId = `${QUEUE_ID}`;
+        await setTimeout(1);
         db.prepare(`
             INSERT INTO ${REQUESTS_TABLE_NAME}(queueId, id, url, uniqueKey, json)
             VALUES(:queueId, :id, :url, :uniqueKey, :json)
@@ -158,9 +161,10 @@ describe('timestamps:', () => {
         expect(new Date(afterUpdate.accessedAt).getTime()).toBeGreaterThan(new Date(beforeUpdate.accessedAt).getTime());
     });
 
-    test('get updated on request DELETE', () => {
+    test('get updated on request DELETE', async () => {
         const beforeUpdate = selectTimestamps.get();
         const request = numToRequest(1);
+        await setTimeout(1);
         db.prepare(`
             DELETE FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND id = ?
@@ -173,6 +177,7 @@ describe('timestamps:', () => {
     test('getRequest updates accessedAt', async () => {
         const beforeGet = selectTimestamps.get();
         const requestId = numToRequest(1).id;
+        await setTimeout(1);
         await storageLocal.requestQueue(queueName).getRequest(requestId!);
         const afterGet = selectTimestamps.get();
         expect(beforeGet.modifiedAt).toBe(afterGet.modifiedAt);
@@ -181,6 +186,7 @@ describe('timestamps:', () => {
 
     test('listHead updates accessedAt', async () => {
         const beforeGet = selectTimestamps.get();
+        await setTimeout(1);
         await storageLocal.requestQueue(queueName).listHead();
         const afterGet = selectTimestamps.get();
         expect(beforeGet.modifiedAt).toBe(afterGet.modifiedAt);
