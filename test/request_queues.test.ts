@@ -1,4 +1,4 @@
-import { setTimeout } from 'timers/promises';
+import { setTimeout as nativeSetTimeout } from 'timers';
 import { ensureDirSync, readdirSync } from 'fs-extra';
 import { ArgumentError } from 'ow';
 import { join } from 'path';
@@ -10,6 +10,11 @@ import { uniqueKeyToRequestId } from '../src/utils';
 import { prepareTestDir, removeTestDir } from './_tools';
 import type { DatabaseConnectionCache } from '../src/database_connection_cache';
 import type { RequestModel } from '../src/resource_clients/request_queue';
+
+// TODO: switch to timers/promises when targeting Node.js 16
+const setTimeout = (ms = 1) => new Promise((resolve) => {
+    nativeSetTimeout(resolve, ms);
+});
 
 const REQUESTS_TABLE_NAME = `${STORAGE_NAMES.REQUEST_QUEUES}_requests`;
 
