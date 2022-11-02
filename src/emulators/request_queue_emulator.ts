@@ -361,8 +361,9 @@ export class RequestQueueEmulator {
                         result.processedRequests.push(new ProcessedRequest(model.id!, model.uniqueKey));
                     } catch (err) {
                         if (err.code === ERROR_REQUEST_NOT_UNIQUE) {
+                            const orderNo = this.selectRequestOrderNoByModel(model);
                             // If we got here it means that the request was already present.
-                            result.unprocessedRequests.push(new UnprocessedRequest(model.id!, model.url, model.method));
+                            result.processedRequests.push(new ProcessedRequest(model.id!, model.uniqueKey, orderNo));
                         } else if (err.code === ERROR_QUEUE_DOES_NOT_EXIST) {
                             throw new Error(`Request queue with id: ${model.queueId} does not exist.`);
                         } else {
