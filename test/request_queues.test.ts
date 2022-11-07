@@ -598,12 +598,13 @@ describe('batchAddRequests', () => {
     test('succeeds when request is already present', async () => {
         const queueOperationInfo = await storageLocal.requestQueue(queueName).batchAddRequests([request]);
         expect(queueOperationInfo).toEqual<BatchAddRequestsResult>({
-            processedRequests: [],
-            unprocessedRequests: [{
-                uniqueKey: uniqueKeyToRequestId(request.url),
-                url: request.url,
-                method: request.method,
+            processedRequests: [{
+                requestId: uniqueKeyToRequestId(request.url),
+                uniqueKey: request.uniqueKey,
+                wasAlreadyHandled: false,
+                wasAlreadyPresent: true,
             }],
+            unprocessedRequests: [],
         });
         expect(counter.requests(queueName)).toBe(startCount);
     });
@@ -634,12 +635,13 @@ describe('batchAddRequests', () => {
 
         const queueOperationInfo = await storageLocal.requestQueue(queueName).batchAddRequests([request]);
         expect(queueOperationInfo).toEqual<BatchAddRequestsResult>({
-            processedRequests: [],
-            unprocessedRequests: [{
-                uniqueKey: uniqueKeyToRequestId(request.url),
-                url: request.url,
-                method: request.method,
+            processedRequests: [{
+                requestId: uniqueKeyToRequestId(request.url),
+                uniqueKey: request.uniqueKey,
+                wasAlreadyHandled: true,
+                wasAlreadyPresent: true,
             }],
+            unprocessedRequests: [],
         });
         expect(counter.requests(queueName)).toBe(startCount);
     });
@@ -649,12 +651,13 @@ describe('batchAddRequests', () => {
 
         const queueOperationInfo = await storageLocal.requestQueue(queueName).batchAddRequests([request]);
         expect(queueOperationInfo).toEqual<BatchAddRequestsResult>({
-            processedRequests: [],
-            unprocessedRequests: [{
-                uniqueKey: uniqueKeyToRequestId(request.url),
-                url: request.url,
-                method: request.method,
+            processedRequests: [{
+                requestId: uniqueKeyToRequestId(request.url),
+                uniqueKey: request.uniqueKey,
+                wasAlreadyHandled: false,
+                wasAlreadyPresent: true,
             }],
+            unprocessedRequests: [],
         });
         expect(counter.requests(queueName)).toBe(startCount);
     });
