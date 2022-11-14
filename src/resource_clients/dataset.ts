@@ -137,7 +137,11 @@ export class DatasetClient {
             desc,
         } = options;
 
-        const [start, end] = this._getStartAndEndIndexes(offset, limit);
+        const [start, end] = this._getStartAndEndIndexes(
+            desc ? Math.max(this.itemCount! - offset - limit, 0) : offset,
+            limit,
+        );
+
         const items = [];
         for (let idx = start; idx < end; idx++) {
             const item = await this._readAndParseFile(idx);
