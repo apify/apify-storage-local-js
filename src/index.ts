@@ -4,6 +4,7 @@ import { readdir, rm } from 'fs/promises';
 import { join, resolve } from 'path';
 import log from '@apify/log';
 import { ENV_VARS, KEY_VALUE_STORE_KEYS, LOCAL_ENV_VARS } from '@apify/consts';
+import { SetStatusMessageOptions, StorageClient } from '@crawlee/types';
 import { STORAGE_NAMES, STORAGE_TYPES } from './consts';
 import { DatabaseConnectionCache } from './database_connection_cache';
 import { DatasetClient } from './resource_clients/dataset';
@@ -41,7 +42,7 @@ export interface RequestQueueOptions {
 /**
  * Represents local emulation of [Apify Storage](https://apify.com/storage).
  */
-export class ApifyStorageLocal {
+export class ApifyStorageLocal implements StorageClient {
     readonly storageDir: string;
 
     readonly requestQueueDir: string;
@@ -156,6 +157,16 @@ export class ApifyStorageLocal {
             storageDir: this.requestQueueDir,
             dbConnections: this.dbConnections,
         });
+    }
+
+    setStatusMessage(message: string, options: SetStatusMessageOptions = {}): Promise<void> {
+        ow(message, ow.string);
+        ow(options, ow.optional.object.exactShape({
+            isStatusMessageTerminal: ow.optional.boolean,
+        }));
+
+        log.info(`Setting${options.isStatusMessageTerminal ? ' terminal' : ''} status message: ${message}`);
+        return Promise.resolve();
     }
 
     /**
