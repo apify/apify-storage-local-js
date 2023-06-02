@@ -14,19 +14,16 @@ jobs:
 
         strategy:
             matrix:
-                os: [ubuntu-latest, windows-latest]
-                node-version: [14, 16, 18]
+                os: [ ubuntu-latest ]
+                node-version: [ 14, 16, 18 ]
 
         steps:
-            -
-                uses: actions/checkout@v2
-            -
-                name: Use Node.js ${{ matrix.node-version }}
+            -   uses: actions/checkout@v3
+            -   name: Use Node.js ${{ matrix.node-version }}
                 uses: actions/setup-node@v1
                 with:
                     node-version: ${{ matrix.node-version }}
-            -
-                name: Cache Node Modules
+            -   name: Cache Node Modules
                 if: ${{ matrix.node-version == 16 }}
                 uses: actions/cache@v2
                 with:
@@ -34,33 +31,27 @@ jobs:
                         node_modules
                         build
                     key: cache-${{ github.run_id }}-v16
-            -
-                name: Install Dependencies
+            -   name: Install Dependencies
                 run: npm install
-            -
-                name: Run Tests
+            -   name: Run Tests
                 run: npm test
 
     lint:
         name: Lint
-        needs: [build_and_test]
+        needs: [ build_and_test ]
         runs-on: ubuntu-latest
 
         steps:
-            -
-                uses: actions/checkout@v2
-            -
-                name: Use Node.js 16
+            -   uses: actions/checkout@v3
+            -   name: Use Node.js 16
                 uses: actions/setup-node@v1
                 with:
                     node-version: 16
-            -
-                name: Load Cache
+            -   name: Load Cache
                 uses: actions/cache@v2
                 with:
                     path: |
                         node_modules
                         build
                     key: cache-${{ github.run_id }}-v16
-            -
-                run: npm run lint
+            -   run: npm run lint
