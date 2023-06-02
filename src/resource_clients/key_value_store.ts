@@ -15,7 +15,6 @@ const streamFinished = util.promisify(stream.finished);
 
 export interface KeyValueStoreRecord {
     key: string;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     value: any;
     contentType?: string;
 }
@@ -268,7 +267,7 @@ export class KeyValueStoreClient {
                 const writeStream = value.pipe(createWriteStream(filePath));
                 await streamFinished(writeStream);
             } else {
-                await writeFile(filePath, value);
+                await writeFile(filePath, value as string);
             }
         } catch (err) {
             if (err.code === 'ENOENT') {
@@ -311,7 +310,6 @@ export class KeyValueStoreClient {
      * Returns an object when a file is found and handler executes successfully, undefined otherwise.
      * @private
      */
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     private async _handleFile(key: string, handler: (...args: any[]) => unknown | Promise<unknown>) {
         for (const extension of COMMON_LOCAL_FILE_EXTENSIONS) {
             const fileName = `${key}.${extension}`;

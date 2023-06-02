@@ -5,8 +5,9 @@
     },
     "overrides": [
         {
-            "files": ["src/**/*.ts"],
+            "files": ["*.ts"],
             "rules": {
+                "@typescript-eslint/no-explicit-any": "off",
                 "import/extensions": 0
             }
         }

@@ -1,5 +1,5 @@
 import { join, parse } from 'path';
-import type { Database, Statement, Transaction, RunResult } from 'better-sqlite3-with-prebuilds';
+import type { Database, Statement, Transaction, RunResult } from 'better-sqlite3';
 import { QueueOperationInfo } from './queue_operation_info';
 import { STORAGE_NAMES, TIMESTAMP_SQL, DATABASE_FILE_NAME } from '../consts';
 import type { DatabaseConnectionCache } from '../database_connection_cache';
@@ -138,7 +138,7 @@ export class RequestQueueEmulator {
                 WHERE id = ?
             `);
         }
-        return this._selectById.get(id);
+        return this._selectById.get(id) as RawQueueTableData;
     }
 
     deleteById(id: string): RunResult {
@@ -159,7 +159,7 @@ export class RequestQueueEmulator {
                 WHERE name = ?
             `);
         }
-        return this._selectByName.get(name);
+        return this._selectByName.get(name) as RawQueueTableData;
     }
 
     insertByName(name: string): RunResult {
@@ -184,7 +184,7 @@ export class RequestQueueEmulator {
                 return this.selectById(lastInsertRowid.toString());
             });
         }
-        return this._selectOrInsertTransaction(name);
+        return this._selectOrInsertTransaction(name) as RawQueueTableData;
     }
 
     selectModifiedAtById(id: string | number): string {
@@ -194,7 +194,7 @@ export class RequestQueueEmulator {
                 WHERE id = ?
             `).pluck();
         }
-        return this._selectModifiedAtById.get(id);
+        return this._selectModifiedAtById.get(id) as string;
     }
 
     updateNameById(id: string | number, name: string): RunResult {
@@ -253,7 +253,7 @@ export class RequestQueueEmulator {
                 WHERE queueId = CAST(:queueId as INTEGER) AND id = :id
             `).pluck();
         }
-        return this._selectRequestOrderNoByModel.get(requestModel);
+        return this._selectRequestOrderNoByModel.get(requestModel) as number;
     }
 
     selectRequestJsonByIdAndQueueId(requestId: string, queueId: string): string {
@@ -263,7 +263,7 @@ export class RequestQueueEmulator {
                 WHERE queueId = CAST(? as INTEGER) AND id = ?
             `).pluck();
         }
-        return this._selectRequestJsonByModel.get(queueId, requestId);
+        return this._selectRequestJsonByModel.get(queueId, requestId) as string;
     }
 
     selectRequestJsonsByQueueIdWithLimit(queueId: string, limit: number): string[] {
@@ -274,7 +274,7 @@ export class RequestQueueEmulator {
                 LIMIT ?
             `).pluck();
         }
-        return this._selectRequestJsonsByQueueIdWithLimit.all(queueId, limit);
+        return this._selectRequestJsonsByQueueIdWithLimit.all(queueId, limit) as string[];
     }
 
     insertRequestByModel(requestModel: RequestModel): RunResult {
@@ -340,7 +340,7 @@ export class RequestQueueEmulator {
                 }
             });
         }
-        return this._addRequestTransaction(requestModel);
+        return this._addRequestTransaction(requestModel) as QueueOperationInfo;
     }
 
     batchAddRequests(requestModels: RequestModel[]): BatchAddRequestsResult {
@@ -376,7 +376,7 @@ export class RequestQueueEmulator {
             });
         }
 
-        return this._addRequestsTransaction(requestModels);
+        return this._addRequestsTransaction(requestModels) as BatchAddRequestsResult;
     }
 
     updateRequest(requestModel: RequestModel): QueueOperationInfo {
@@ -408,7 +408,7 @@ export class RequestQueueEmulator {
                 return new QueueOperationInfo(model.id, orderNo);
             });
         }
-        return this._updateRequestTransaction(requestModel);
+        return this._updateRequestTransaction(requestModel) as QueueOperationInfo;
     }
 
     deleteRequest(id: string): unknown {

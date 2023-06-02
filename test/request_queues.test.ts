@@ -2,7 +2,7 @@ import { setTimeout as nativeSetTimeout } from 'timers';
 import { ensureDirSync, readdirSync } from 'fs-extra';
 import { ArgumentError } from 'ow';
 import { join } from 'path';
-import type { Database, Statement } from 'better-sqlite3-with-prebuilds';
+import type { Database, Statement } from 'better-sqlite3';
 import { ApifyStorageLocal } from '../src/index';
 import { STORAGE_NAMES, DATABASE_FILE_NAME } from '../src/consts';
 import { BatchAddRequestsResult, RequestQueueEmulator } from '../src/emulators/request_queue_emulator';
@@ -97,7 +97,7 @@ describe('sanity checks for seeded data', () => {
             const { name } = db.prepare(`
                 SELECT name FROM sqlite_master
                 WHERE type='table' AND name='${STORAGE_NAMES.REQUEST_QUEUES}';
-            `).get();
+            `).get() as any;
             expect(name).toBe(STORAGE_NAMES.REQUEST_QUEUES);
         });
 
@@ -106,7 +106,7 @@ describe('sanity checks for seeded data', () => {
             const { name } = db.prepare(`
                 SELECT name FROM sqlite_master
                 WHERE type='table' AND name='${REQUESTS_TABLE_NAME}';
-            `).get();
+            `).get() as any;
             expect(name).toBe(REQUESTS_TABLE_NAME);
         });
 
@@ -131,28 +131,28 @@ describe('timestamps:', () => {
     });
 
     test('createdAt has a valid date', () => {
-        const { createdAt } = selectTimestamps.get();
+        const { createdAt } = selectTimestamps.get() as any;
         const createdAtTimestamp = new Date(createdAt).getTime();
         expect(createdAtTimestamp).toBeGreaterThan(testInitTimestamp);
         expect(createdAtTimestamp).toBeLessThan(Date.now());
     });
 
     test('get updated on request UPDATE', async () => {
-        const beforeUpdate = selectTimestamps.get();
+        const beforeUpdate = selectTimestamps.get() as any;
         const request = numToRequest(1);
         await setTimeout(1);
         db.prepare(`
             UPDATE ${REQUESTS_TABLE_NAME}
             SET retryCount = 10
             WHERE queueId = ${QUEUE_ID} AND id = ?
-        `).run(request.id);
-        const afterUpdate = selectTimestamps.get();
+        `).run(request.id) as any;
+        const afterUpdate = selectTimestamps.get() as any;
         expect(new Date(afterUpdate.modifiedAt).getTime()).toBeGreaterThan(new Date(beforeUpdate.modifiedAt).getTime());
         expect(new Date(afterUpdate.accessedAt).getTime()).toBeGreaterThan(new Date(beforeUpdate.accessedAt).getTime());
     });
 
     test('get updated on request INSERT', async () => {
-        const beforeUpdate = selectTimestamps.get();
+        const beforeUpdate = selectTimestamps.get() as any;
         const request = numToRequest(100);
         request.json = 'x';
         request.queueId = `${QUEUE_ID}`;
@@ -161,39 +161,39 @@ describe('timestamps:', () => {
             INSERT INTO ${REQUESTS_TABLE_NAME}(queueId, id, url, uniqueKey, json)
             VALUES(:queueId, :id, :url, :uniqueKey, :json)
         `).run(request);
-        const afterUpdate = selectTimestamps.get();
+        const afterUpdate = selectTimestamps.get() as any;
         expect(new Date(afterUpdate.modifiedAt).getTime()).toBeGreaterThan(new Date(beforeUpdate.modifiedAt).getTime());
         expect(new Date(afterUpdate.accessedAt).getTime()).toBeGreaterThan(new Date(beforeUpdate.accessedAt).getTime());
     });
 
     test('get updated on request DELETE', async () => {
-        const beforeUpdate = selectTimestamps.get();
+        const beforeUpdate = selectTimestamps.get() as any;
         const request = numToRequest(1);
         await setTimeout(1);
         db.prepare(`
             DELETE FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND id = ?
-        `).run(request.id);
-        const afterUpdate = selectTimestamps.get();
+        `).run(request.id) as any;
+        const afterUpdate = selectTimestamps.get() as any;
         expect(new Date(afterUpdate.modifiedAt).getTime()).toBeGreaterThan(new Date(beforeUpdate.modifiedAt).getTime());
         expect(new Date(afterUpdate.accessedAt).getTime()).toBeGreaterThan(new Date(beforeUpdate.accessedAt).getTime());
     });
 
     test('getRequest updates accessedAt', async () => {
-        const beforeGet = selectTimestamps.get();
+        const beforeGet = selectTimestamps.get() as any;
         const requestId = numToRequest(1).id;
         await setTimeout(1);
         await storageLocal.requestQueue(queueName).getRequest(requestId!);
-        const afterGet = selectTimestamps.get();
+        const afterGet = selectTimestamps.get() as any;
         expect(beforeGet.modifiedAt).toBe(afterGet.modifiedAt);
         expect(new Date(afterGet.accessedAt).getTime()).toBeGreaterThan(new Date(beforeGet.accessedAt).getTime());
     });
 
     test('listHead updates accessedAt', async () => {
-        const beforeGet = selectTimestamps.get();
+        const beforeGet = selectTimestamps.get() as any;
         await setTimeout(1);
         await storageLocal.requestQueue(queueName).listHead();
-        const afterGet = selectTimestamps.get();
+        const afterGet = selectTimestamps.get() as any;
         expect(beforeGet.modifiedAt).toBe(afterGet.modifiedAt);
         expect(new Date(afterGet.accessedAt).getTime()).toBeGreaterThan(new Date(beforeGet.accessedAt).getTime());
     });
@@ -215,13 +215,13 @@ describe('request counts:', () => {
         const requestId = numToRequest(1).id;
 
         await storageLocal.requestQueue(queueName).getRequest(requestId!);
-        let counts = selectRequestCounts.get();
+        let counts = selectRequestCounts.get() as any;
         expect(counts.totalRequestCount).toBe(startCount);
         expect(counts.handledRequestCount).toBe(0);
         expect(counts.pendingRequestCount).toBe(startCount);
 
         await storageLocal.requestQueue(queueName).listHead();
-        counts = selectRequestCounts.get();
+        counts = selectRequestCounts.get() as any;
         expect(counts.totalRequestCount).toBe(startCount);
         expect(counts.handledRequestCount).toBe(0);
         expect(counts.pendingRequestCount).toBe(startCount);
@@ -232,7 +232,7 @@ describe('request counts:', () => {
         request.id = undefined;
 
         await storageLocal.requestQueue(queueName).addRequest(request);
-        const counts = selectRequestCounts.get();
+        const counts = selectRequestCounts.get() as any;
         expect(counts.totalRequestCount).toBe(startCount + 1);
         expect(counts.handledRequestCount).toBe(0);
         expect(counts.pendingRequestCount).toBe(startCount + 1);
@@ -244,7 +244,7 @@ describe('request counts:', () => {
         request.handledAt = new Date();
 
         await storageLocal.requestQueue(queueName).addRequest(request);
-        const counts = selectRequestCounts.get();
+        const counts = selectRequestCounts.get() as any;
         expect(counts.totalRequestCount).toBe(startCount + 1);
         expect(counts.handledRequestCount).toBe(1);
         expect(counts.pendingRequestCount).toBe(startCount);
@@ -255,7 +255,7 @@ describe('request counts:', () => {
         request.handledAt = new Date();
 
         await storageLocal.requestQueue(queueName).updateRequest(request);
-        const counts = selectRequestCounts.get();
+        const counts = selectRequestCounts.get() as any;
         expect(counts.totalRequestCount).toBe(startCount);
         expect(counts.handledRequestCount).toBe(1);
         expect(counts.pendingRequestCount).toBe(startCount - 1);
@@ -264,12 +264,12 @@ describe('request counts:', () => {
     test('handling of a handled request is a no-op', async () => {
         const request = numToRequest(1);
         markRequestHandled(db, request.id!);
-        let counts = selectRequestCounts.get();
+        let counts = selectRequestCounts.get() as any;
         expect(counts.handledRequestCount).toBe(1);
         request.handledAt = new Date();
 
         await storageLocal.requestQueue(queueName).updateRequest(request);
-        counts = selectRequestCounts.get();
+        counts = selectRequestCounts.get() as any;
         expect(counts.totalRequestCount).toBe(startCount);
         expect(counts.handledRequestCount).toBe(1);
         expect(counts.pendingRequestCount).toBe(startCount - 1);
@@ -279,11 +279,11 @@ describe('request counts:', () => {
         const request = numToRequest(1);
         request.handledAt = undefined;
         markRequestHandled(db, request.id!);
-        let counts = selectRequestCounts.get();
+        let counts = selectRequestCounts.get() as any;
         expect(counts.handledRequestCount).toBe(1);
 
         await storageLocal.requestQueue(queueName).updateRequest(request);
-        counts = selectRequestCounts.get();
+        counts = selectRequestCounts.get() as any;
         expect(counts.totalRequestCount).toBe(startCount);
         expect(counts.handledRequestCount).toBe(0);
         expect(counts.pendingRequestCount).toBe(startCount);
@@ -294,7 +294,7 @@ describe('request counts:', () => {
         request.handledAt = undefined;
 
         await storageLocal.requestQueue(queueName).updateRequest(request);
-        const counts = selectRequestCounts.get();
+        const counts = selectRequestCounts.get() as any;
         expect(counts.totalRequestCount).toBe(startCount);
         expect(counts.handledRequestCount).toBe(0);
         expect(counts.pendingRequestCount).toBe(startCount);
@@ -371,7 +371,7 @@ describe('addRequest', () => {
         request.id = undefined;
     });
 
-    test('adds a request', async () => { /* eslint-disable no-shadow */
+    test('adds a request', async () => {
         const newRequest = numToRequest(startCount + 1);
         const newRequestId = newRequest.id;
         newRequest.id = undefined;
@@ -387,7 +387,7 @@ describe('addRequest', () => {
         const requestModel = db.prepare(`
             SELECT * FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND id = ?
-        `).get(newRequestId);
+        `).get(newRequestId) as any;
         expect(requestModel.queueId).toBe(QUEUE_ID);
         expect(requestModel.id).toBe(newRequestId);
         expect(requestModel.url).toBe(newRequest.url);
@@ -422,7 +422,7 @@ describe('addRequest', () => {
         const requestModel = db.prepare(`
             SELECT * FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND id = ?
-        `).get(requestId);
+        `).get(requestId) as any;
         expect(requestModel.id).toBe(requestId);
         expect(requestModel.method).toBe('GET');
         expect(typeof requestModel.orderNo).toBe('number');
@@ -456,7 +456,7 @@ describe('addRequest', () => {
         expect(counter.requests(queueName)).toBe(startCount);
     });
 
-    test('forefront adds request to queue head', async () => { /* eslint-disable no-shadow */
+    test('forefront adds request to queue head', async () => {
         const newRequest = numToRequest(startCount + 1);
         const newRequestId = newRequest.id;
         newRequest.id = undefined;
@@ -533,7 +533,7 @@ describe('batchAddRequests', () => {
         request.id = undefined;
     });
 
-    test('adds requests', async () => { /* eslint-disable no-shadow */
+    test('adds requests', async () => {
         const newRequest1 = numToRequest(startCount + 1);
         const newRequestId1 = newRequest1.id!;
         newRequest1.id = undefined;
@@ -565,7 +565,7 @@ describe('batchAddRequests', () => {
         const requestModel1 = db.prepare(`
             SELECT * FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND id = ?
-        `).get(newRequestId1);
+        `).get(newRequestId1) as any;
         expect(requestModel1.queueId).toBe(QUEUE_ID);
         expect(requestModel1.id).toBe(newRequestId1);
         expect(requestModel1.url).toBe(newRequest1.url);
@@ -581,7 +581,7 @@ describe('batchAddRequests', () => {
         const requestModel2 = db.prepare(`
             SELECT * FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND id = ?
-        `).get(newRequestId2);
+        `).get(newRequestId2) as any;
         expect(requestModel2.queueId).toBe(QUEUE_ID);
         expect(requestModel2.id).toBe(newRequestId2);
         expect(requestModel2.url).toBe(newRequest2.url);
@@ -620,7 +620,7 @@ describe('batchAddRequests', () => {
         const requestModel = db.prepare(`
             SELECT * FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND id = ?
-        `).get(requestId);
+        `).get(requestId) as any;
         expect(requestModel.id).toBe(requestId);
         expect(requestModel.method).toBe('GET');
         expect(typeof requestModel.orderNo).toBe('number');
@@ -662,7 +662,7 @@ describe('batchAddRequests', () => {
         expect(counter.requests(queueName)).toBe(startCount);
     });
 
-    test('forefront adds requests to queue head', async () => { /* eslint-disable no-shadow */
+    test('forefront adds requests to queue head', async () => {
         const newRequest1 = numToRequest(startCount + 1);
         const newRequestId1 = newRequest1.id;
         newRequest1.id = undefined;
@@ -793,7 +793,7 @@ describe('updateRequest', () => {
         const requestModel = db.prepare(`
             SELECT * FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND id = ?
-        `).get(request.id);
+        `).get(request.id) as any;
 
         expect(requestModel.method).toBe(method);
         expect(requestModel.retryCount).toBe(retryCount);
