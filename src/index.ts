@@ -84,7 +84,6 @@ export class ApifyStorageLocal {
         const enableWalMode = bool(process.env.APIFY_LOCAL_STORAGE_ENABLE_WAL_MODE) ?? options.enableWalMode ?? true;
 
         if (!pathExistsSync(storageDir)) {
-            // eslint-disable-next-line max-len
             log.info(`Created a data storage folder at ${storageDir}. You can override the path by setting the APIFY_LOCAL_STORAGE_DIR environment variable`);
             ensureDirSync(storageDir);
         }
@@ -223,7 +222,7 @@ export class ApifyStorageLocal {
 
         const dirents = readdirSync(storageDir, { withFileTypes: true });
         for (const dirent of dirents) {
-            if (!dirent.isDirectory()) continue; // eslint-disable-line
+            if (!dirent.isDirectory()) continue;
 
             const innerStorageDir = resolve(storageDir, dirent.name);
 

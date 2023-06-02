@@ -99,7 +99,7 @@ describe('setRecord', () => {
     const storeName = 'first';
     const startCount = TEST_STORES[1].recordCount;
 
-    test('adds a value', async () => { /* eslint-disable no-shadow */
+    test('adds a value', async () => {
         const record = numToRecord(startCount + 1);
 
         await storageLocal.keyValueStore(storeName).setRecord(stripRecord(record));

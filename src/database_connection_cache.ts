@@ -1,4 +1,4 @@
-import Sqlite, { Database, Options } from 'better-sqlite3-with-prebuilds';
+import Sqlite, { Database, Options } from 'better-sqlite3';
 
 /**
  * SQLite prefers to have a single connection shared by

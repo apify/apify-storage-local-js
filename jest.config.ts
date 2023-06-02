@@ -11,7 +11,7 @@ export default async (): Promise<Config.InitialOptions> => ({
     testEnvironment: 'node',
     testRunner: 'jest-circus/runner',
     testTimeout: 5000,
-    collectCoverage: true,
+    // collectCoverage: true,
     collectCoverageFrom: [
         '**/src/**/*.ts',
         '**/src/**/*.js',
