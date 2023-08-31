@@ -3,7 +3,7 @@ import type { Database, Statement, Transaction, RunResult } from 'better-sqlite3
 import { QueueOperationInfo } from './queue_operation_info';
 import { STORAGE_NAMES, TIMESTAMP_SQL, DATABASE_FILE_NAME } from '../consts';
 import type { DatabaseConnectionCache } from '../database_connection_cache';
-import type { RequestModel } from '../resource_clients/request_queue';
+import type { ProlongRequestLockOptions, RequestModel, RequestOptions } from '../resource_clients/request_queue';
 import { ProcessedRequest } from './batch_add_requests/processed_request';
 import { UnprocessedRequest } from './batch_add_requests/unprocessed_request';
 
@@ -102,6 +102,20 @@ export class RequestQueueEmulator {
     private _updateRequestTransaction!: Transaction;
 
     private _deleteRequestTransaction!: Transaction;
+
+    private _fetchRequestNotExpired!: Statement<[id: string]>;
+
+    private _fetchRequestNotExpiredAndLocked!: Statement<{ id: string; currentTime: number }>;
+
+    private _updateOrderNo!: Statement<{ id: string; orderNo: number }>;
+
+    private _prolongRequestLockTransaction!: Transaction<(id: string, prolongOptions: ProlongRequestLockOptions) => Date>;
+
+    private _deleteRequestLockTransaction!: Transaction<(id: string, options: RequestOptions) => void>;
+
+    private _fetchRequestHeadThatWillBeLocked!: Statement<{ queueId: string; limit: number; currentTime: number; }>;
+
+    private _listAndLockHeadTransaction!: Transaction<(queueId: string, limit: number, lockSecs: number) => string[]>;
 
     constructor({ queueDir, dbConnections }: RequestQueueEmulatorOptions) {
         this.dbPath = join(queueDir, DATABASE_FILE_NAME);
@@ -418,6 +432,122 @@ export class RequestQueueEmulator {
             });
         }
         return this._deleteRequestTransaction(id);
+    }
+
+    prolongRequestLock(id: string, options: ProlongRequestLockOptions) {
+        if (!this._fetchRequestNotExpired) {
+            this._fetchRequestNotExpired = this.db.prepare(/* sql */`
+                SELECT id, orderNo FROM ${this.requestsTableName}
+                WHERE id = ?
+                AND orderNo IS NOT NULL
+            `);
+        }
+
+        this._initUpdateOrderNo();
+
+        if (!this._prolongRequestLockTransaction) {
+            this._prolongRequestLockTransaction = this.db.transaction((passedId, passedOptions) => {
+                const existingRequest = this._fetchRequestNotExpired.get(passedId) as { orderNo: number; id: string } | undefined;
+
+                if (!existingRequest) {
+                    throw new Error(`Request with ID ${passedId} was already handled or doesn't exist`);
+                }
+
+                const unlockTimestamp = Math.abs(existingRequest.orderNo) + passedOptions.lockSecs * 1000;
+                const newOrderNo = passedOptions.forefront ? -unlockTimestamp : unlockTimestamp;
+
+                this._updateOrderNo.run({ id: passedId, orderNo: newOrderNo });
+
+                return new Date(unlockTimestamp);
+            });
+        }
+
+        return this._prolongRequestLockTransaction(id, options);
+    }
+
+    deleteRequestLock(id: string, options: RequestOptions) {
+        if (!this._fetchRequestNotExpiredAndLocked) {
+            this._fetchRequestNotExpiredAndLocked = this.db.prepare(/* sql */`
+                SELECT id FROM ${this.requestsTableName}
+                WHERE id = :id
+                AND orderNo IS NOT NULL
+                AND (
+                    orderNo > :currentTime
+                    OR orderNo < -(:currentTime)
+                )
+            `);
+        }
+
+        this._initUpdateOrderNo();
+
+        if (!this._deleteRequestLockTransaction) {
+            this._deleteRequestLockTransaction = this.db.transaction((passedId, { forefront }) => {
+                const timestamp = Date.now();
+
+                const existingRequest = this._fetchRequestNotExpiredAndLocked.get({
+                    id: passedId,
+                    currentTime: timestamp,
+                }) as { id: string } | undefined;
+
+                if (!existingRequest) {
+                    throw new Error(`Request with ID ${passedId} was already handled, doesn't exist, or is not locked`);
+                }
+
+                this._updateOrderNo.run({ id: passedId, orderNo: forefront ? -timestamp : timestamp });
+            });
+        }
+
+        return this._deleteRequestLockTransaction(id, options);
+    }
+
+    listAndLockHead(queueId: string, limit: number, lockSecs: number): string[] {
+        if (!this._fetchRequestHeadThatWillBeLocked) {
+            this._fetchRequestHeadThatWillBeLocked = this.db.prepare(/* sql */`
+                SELECT id, "json", orderNo FROM ${this.requestsTableName}
+                WHERE queueId = CAST(:queueId as INTEGER)
+                AND orderNo IS NOT NULL
+                AND orderNo <= :currentTime
+                AND orderNo >= -(:currentTime)
+                ORDER BY orderNo ASC
+                LIMIT :limit
+            `);
+        }
+
+        this._initUpdateOrderNo();
+
+        if (!this._listAndLockHeadTransaction) {
+            this._listAndLockHeadTransaction = this.db.transaction((passedQueueId, passedLimit, passedLockSecs) => {
+                const timestamp = Date.now();
+
+                const requestsToLock = this._fetchRequestHeadThatWillBeLocked.all({
+                    queueId: passedQueueId,
+                    currentTime: timestamp,
+                    limit: passedLimit,
+                }) as { id: string; json: string; orderNo: number }[];
+
+                if (!requestsToLock.length) {
+                    return [];
+                }
+
+                for (const { id, orderNo } of requestsToLock) {
+                    const newOrderNo = (timestamp + passedLockSecs * 1000) * (orderNo > 0 ? 1 : -1);
+
+                    this._updateOrderNo.run({ id, orderNo: newOrderNo });
+                }
+
+                return requestsToLock.map(({ json }) => json);
+            });
+        }
+
+        return this._listAndLockHeadTransaction(queueId, limit, lockSecs);
+    }
+
+    private _initUpdateOrderNo() {
+        this._updateOrderNo ??= this.db.prepare(/* sql */`
+            UPDATE ${this.requestsTableName}
+            SET orderNo = :orderNo
+            WHERE id = :id
+        `);
     }
 
     private _createTables() {
