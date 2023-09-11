@@ -52,6 +52,39 @@ export interface RawRequestsTableData {
     json: string;
 }
 
+interface RequestQueueStatements {
+    selectById: Statement<[id: string | number]>;
+    deleteById: Statement<[id: string]>;
+    selectByName: Statement<[name: string]>;
+    selectModifiedAtById: Statement<[id: string | number]>;
+    insertByName: Statement<[name: string]>;
+    updateNameById: Statement<[{ id: string | number; name: string }]>;
+    updateModifiedAtById: Statement<[id: string | number]>;
+    updateAccessedAtById: Statement<[id: string | number]>;
+    adjustTotalAndHandledRequestCounts: Statement<[{ id: string; totalAdjustment: number; handledAdjustment: number }]>;
+    selectRequestOrderNoByModel: Statement<[requestModel: RequestModel]>;
+    selectRequestJsonByModel: Statement<[{ requestId: string; queueId: string }]>;
+    selectRequestJsonsByQueueIdWithLimit: Statement<[{queueId: string, limit: number}]>;
+    insertRequestByModel: Statement<[requestModel: RequestModel]>;
+    updateRequestByModel: Statement<[requestModel: RequestModel]>;
+    deleteRequestById: Statement<[id: string]>;
+    fetchRequestNotExpired: Statement<[id: string]>;
+    fetchRequestNotExpiredAndLocked: Statement<{ id: string; currentTime: number }>;
+    updateOrderNo: Statement<{ id: string; orderNo: number }>;
+    fetchRequestHeadThatWillBeLocked: Statement<{ queueId: string; limit: number; currentTime: number; }>;
+}
+
+interface RequestQueueTransactions {
+    addRequest: Transaction<(requestModel: RequestModel) => QueueOperationInfo>;
+    selectOrInsertByName: Transaction<(name: string) => RawQueueTableData>;
+    batchAddRequests: Transaction<(requestModels: RequestModel[]) => BatchAddRequestsResult>;
+    updateRequest: Transaction<(requestModel: RequestModel) => QueueOperationInfo>;
+    deleteRequest: Transaction<(id: string) => unknown>;
+    prolongRequestLock: Transaction<(id: string, options: ProlongRequestLockOptions) => Date>;
+    deleteRequestLock: Transaction<(id: string, options: RequestOptions) => void>;
+    listAndLockHead: Transaction<(queueId: string, limit: number, lockSecs: number) => string[]>;
+}
+
 export class RequestQueueEmulator {
     dbPath: string;
 
@@ -63,59 +96,8 @@ export class RequestQueueEmulator {
 
     requestsTableName = `${STORAGE_NAMES.REQUEST_QUEUES}_requests`;
 
-    private _selectById!: Statement;
-
-    private _deleteById!: Statement;
-
-    private _selectByName!: Statement;
-
-    private _selectModifiedAtById!: Statement;
-
-    private _insertByName!: Statement;
-
-    private _updateNameById!: Statement;
-
-    private _updateModifiedAtById!: Statement;
-
-    private _updateAccessedAtById!: Statement;
-
-    private _adjustTotalAndHandledRequestCounts!: Statement;
-
-    private _selectRequestOrderNoByModel!: Statement;
-
-    private _selectRequestJsonByModel!: Statement;
-
-    private _selectRequestJsonsByQueueIdWithLimit!: Statement;
-
-    private _insertRequestByModel!: Statement;
-
-    private _updateRequestByModel!: Statement;
-
-    private _deleteRequestById!: Statement;
-
-    private _selectOrInsertTransaction!: Transaction;
-
-    private _addRequestTransaction!: Transaction;
-
-    private _addRequestsTransaction!: Transaction;
-
-    private _updateRequestTransaction!: Transaction;
-
-    private _deleteRequestTransaction!: Transaction;
-
-    private _fetchRequestNotExpired!: Statement<[id: string]>;
-
-    private _fetchRequestNotExpiredAndLocked!: Statement<{ id: string; currentTime: number }>;
-
-    private _updateOrderNo!: Statement<{ id: string; orderNo: number }>;
-
-    private _prolongRequestLockTransaction!: Transaction<(id: string, prolongOptions: ProlongRequestLockOptions) => Date>;
-
-    private _deleteRequestLockTransaction!: Transaction<(id: string, options: RequestOptions) => void>;
-
-    private _fetchRequestHeadThatWillBeLocked!: Statement<{ queueId: string; limit: number; currentTime: number; }>;
-
-    private _listAndLockHeadTransaction!: Transaction<(queueId: string, limit: number, lockSecs: number) => string[]>;
+    private statements: RequestQueueStatements = null!;
+    private transactions: RequestQueueTransactions = null!;
 
     constructor({ queueDir, dbConnections }: RequestQueueEmulatorOptions) {
         this.dbPath = join(queueDir, DATABASE_FILE_NAME);
@@ -135,6 +117,8 @@ export class RequestQueueEmulator {
         this._createTables();
         this._createTriggers();
         this._createIndexes();
+        this._createStatements();
+        this._createTransactions();
     }
 
     /**
@@ -145,115 +129,43 @@ export class RequestQueueEmulator {
     }
 
     selectById(id: string | number): RawQueueTableData {
-        if (!this._selectById) {
-            this._selectById = this.db.prepare(`
-                SELECT *, CAST(id as TEXT) as id
-                FROM ${this.queueTableName}
-                WHERE id = ?
-            `);
-        }
-        return this._selectById.get(id) as RawQueueTableData;
+        return this.statements.selectById.get(id) as RawQueueTableData;
     }
 
     deleteById(id: string): RunResult {
-        if (!this._deleteById) {
-            this._deleteById = this.db.prepare(`
-                DELETE FROM ${this.queueTableName}
-                WHERE id = CAST(? as INTEGER)
-            `);
-        }
-        return this._deleteById.run(id);
+        return this.statements.deleteById.run(id);
     }
 
     selectByName(name: string): RawQueueTableData {
-        if (!this._selectByName) {
-            this._selectByName = this.db.prepare(`
-                SELECT *, CAST(id as TEXT) as id
-                FROM ${this.queueTableName}
-                WHERE name = ?
-            `);
-        }
-        return this._selectByName.get(name) as RawQueueTableData;
+        return this.statements.selectByName.get(name) as RawQueueTableData;
     }
 
     insertByName(name: string): RunResult {
-        if (!this._insertByName) {
-            this._insertByName = this.db.prepare(`
-                INSERT INTO ${this.queueTableName}(name)
-                VALUES(?)
-            `);
-        }
-        return this._insertByName.run(name);
+        return this.statements.insertByName.run(name);
     }
 
     selectOrInsertByName(name: string): RawQueueTableData {
-        if (!this._selectOrInsertTransaction) {
-            this._selectOrInsertTransaction = this.db.transaction((n) => {
-                if (n) {
-                    const storage = this.selectByName(n);
-                    if (storage) return storage;
-                }
-
-                const { lastInsertRowid } = this.insertByName(n);
-                return this.selectById(lastInsertRowid.toString());
-            });
-        }
-        return this._selectOrInsertTransaction(name) as RawQueueTableData;
+        return this.transactions.selectOrInsertByName(name) as RawQueueTableData;
     }
 
     selectModifiedAtById(id: string | number): string {
-        if (!this._selectModifiedAtById) {
-            this._selectModifiedAtById = this.db.prepare(`
-                SELECT modifiedAt FROM ${this.queueTableName}
-                WHERE id = ?
-            `).pluck();
-        }
-        return this._selectModifiedAtById.get(id) as string;
+        return this.statements.selectModifiedAtById.get(id) as string;
     }
 
     updateNameById(id: string | number, name: string): RunResult {
-        if (!this._updateNameById) {
-            this._updateNameById = this.db.prepare(`
-                UPDATE ${this.queueTableName}
-                SET name = :name
-                WHERE id = CAST(:id as INTEGER)
-            `);
-        }
-        return this._updateNameById.run({ id, name });
+        return this.statements.updateNameById.run({ id, name });
     }
 
     updateModifiedAtById(id: string | number): RunResult {
-        if (!this._updateModifiedAtById) {
-            this._updateModifiedAtById = this.db.prepare(`
-                UPDATE ${this.queueTableName}
-                SET modifiedAt = ${TIMESTAMP_SQL}
-                WHERE id = CAST(? as INTEGER)
-            `);
-        }
-        return this._updateModifiedAtById.run(id);
+        return this.statements.updateModifiedAtById.run(id);
     }
 
     updateAccessedAtById(id: string | number): RunResult {
-        if (!this._updateAccessedAtById) {
-            this._updateAccessedAtById = this.db.prepare(`
-                UPDATE ${this.queueTableName}
-                SET accessedAt = ${TIMESTAMP_SQL}
-                WHERE id = CAST(? as INTEGER)
-            `);
-        }
-        return this._updateAccessedAtById.run(id);
+        return this.statements.updateAccessedAtById.run(id);
     }
 
     adjustTotalAndHandledRequestCounts(id: string, totalAdjustment: number, handledAdjustment: number): RunResult {
-        if (!this._adjustTotalAndHandledRequestCounts) {
-            this._adjustTotalAndHandledRequestCounts = this.db.prepare(`
-                UPDATE ${this.queueTableName}
-                SET totalRequestCount = totalRequestCount + :totalAdjustment,
-                    handledRequestCount = handledRequestCount + :handledAdjustment
-                WHERE id = CAST(:id as INTEGER)
-            `);
-        }
-        return this._adjustTotalAndHandledRequestCounts.run({
+        return this.statements.adjustTotalAndHandledRequestCounts.run({
             id,
             totalAdjustment,
             handledAdjustment,
@@ -261,293 +173,59 @@ export class RequestQueueEmulator {
     }
 
     selectRequestOrderNoByModel(requestModel: RequestModel): number | null {
-        if (!this._selectRequestOrderNoByModel) {
-            this._selectRequestOrderNoByModel = this.db.prepare(`
-                SELECT orderNo FROM ${this.requestsTableName}
-                WHERE queueId = CAST(:queueId as INTEGER) AND id = :id
-            `).pluck();
-        }
-        return this._selectRequestOrderNoByModel.get(requestModel) as number;
+        return this.statements.selectRequestOrderNoByModel.get(requestModel) as number;
     }
 
     selectRequestJsonByIdAndQueueId(requestId: string, queueId: string): string {
-        if (!this._selectRequestJsonByModel) {
-            this._selectRequestJsonByModel = this.db.prepare(`
-                SELECT json FROM ${this.requestsTableName}
-                WHERE queueId = CAST(? as INTEGER) AND id = ?
-            `).pluck();
-        }
-        return this._selectRequestJsonByModel.get(queueId, requestId) as string;
+        return this.statements.selectRequestJsonByModel.get({ queueId, requestId }) as string;
     }
 
     selectRequestJsonsByQueueIdWithLimit(queueId: string, limit: number): string[] {
-        if (!this._selectRequestJsonsByQueueIdWithLimit) {
-            this._selectRequestJsonsByQueueIdWithLimit = this.db.prepare(`
-                SELECT json FROM ${this.requestsTableName}
-                WHERE queueId = CAST(? as INTEGER) AND orderNo IS NOT NULL
-                LIMIT ?
-            `).pluck();
-        }
-        return this._selectRequestJsonsByQueueIdWithLimit.all(queueId, limit) as string[];
+        return this.statements.selectRequestJsonsByQueueIdWithLimit.all({ queueId, limit }) as string[];
     }
 
     insertRequestByModel(requestModel: RequestModel): RunResult {
-        if (!this._insertRequestByModel) {
-            this._insertRequestByModel = this.db.prepare(`
-                INSERT INTO ${this.requestsTableName}(
-                    id, queueId, orderNo, url, uniqueKey, method, retryCount, json
-                ) VALUES (
-                    :id, CAST(:queueId as INTEGER), :orderNo, :url, :uniqueKey, :method, :retryCount, :json
-                )
-            `);
-        }
-        return this._insertRequestByModel.run(requestModel);
+        return this.statements.insertRequestByModel.run(requestModel);
     }
 
     updateRequestByModel(requestModel: RequestModel): RunResult {
-        if (!this._updateRequestByModel) {
-            this._updateRequestByModel = this.db.prepare(`
-                UPDATE ${this.requestsTableName}
-                SET orderNo = :orderNo,
-                    url = :url,
-                    uniqueKey = :uniqueKey,
-                    method = :method,
-                    retryCount = :retryCount,
-                    json = :json
-                WHERE queueId = CAST(:queueId as INTEGER) AND id = :id
-            `);
-        }
-        return this._updateRequestByModel.run(requestModel);
+        return this.statements.updateRequestByModel.run(requestModel);
     }
 
     deleteRequestById(id: string): RunResult {
-        if (!this._deleteRequestById) {
-            this._deleteRequestById = this.db.prepare(`
-                DELETE FROM ${this.requestsTableName}
-                WHERE id = ?
-            `);
-        }
-        return this._deleteRequestById.run(id);
+        return this.statements.deleteById.run(id);
     }
 
     addRequest(requestModel: RequestModel): QueueOperationInfo {
-        if (!this._addRequestTransaction) {
-            this._addRequestTransaction = this.db.transaction((model) => {
-                try {
-                    this.insertRequestByModel(model);
-                    const handledCountAdjustment = model.orderNo === null ? 1 : 0;
-                    this.adjustTotalAndHandledRequestCounts(model.queueId, 1, handledCountAdjustment);
-                    // We return wasAlreadyHandled: false even though the request may
-                    // have been added as handled, because that's how API behaves.
-                    return new QueueOperationInfo(model.id);
-                } catch (err) {
-                    if (err.code === ERROR_REQUEST_NOT_UNIQUE) {
-                        // If we got here it means that the request was already present.
-                        // We need to figure out if it were handled too.
-                        const orderNo = this.selectRequestOrderNoByModel(model);
-                        return new QueueOperationInfo(model.id, orderNo);
-                    }
-                    if (err.code === ERROR_QUEUE_DOES_NOT_EXIST) {
-                        throw new Error(`Request queue with id: ${model.queueId} does not exist.`);
-                    }
-                    throw err;
-                }
-            });
-        }
-        return this._addRequestTransaction(requestModel) as QueueOperationInfo;
+        return this.transactions.addRequest(requestModel) as QueueOperationInfo;
     }
 
     batchAddRequests(requestModels: RequestModel[]): BatchAddRequestsResult {
-        if (!this._addRequestsTransaction) {
-            this._addRequestsTransaction = this.db.transaction((models: RequestModel[]) => {
-                const result: BatchAddRequestsResult = {
-                    processedRequests: [],
-                    unprocessedRequests: [],
-                };
-
-                for (const model of models) {
-                    try {
-                        this.insertRequestByModel(model);
-                        const handledCountAdjustment = model.orderNo == null ? 1 : 0;
-                        this.adjustTotalAndHandledRequestCounts(model.queueId!, 1, handledCountAdjustment);
-                        // We return wasAlreadyHandled: false even though the request may
-                        // have been added as handled, because that's how API behaves.
-                        result.processedRequests.push(new ProcessedRequest(model.id!, model.uniqueKey));
-                    } catch (err) {
-                        if (err.code === ERROR_REQUEST_NOT_UNIQUE) {
-                            const orderNo = this.selectRequestOrderNoByModel(model);
-                            // If we got here it means that the request was already present.
-                            result.processedRequests.push(new ProcessedRequest(model.id!, model.uniqueKey, orderNo));
-                        } else if (err.code === ERROR_QUEUE_DOES_NOT_EXIST) {
-                            throw new Error(`Request queue with id: ${model.queueId} does not exist.`);
-                        } else {
-                            throw err;
-                        }
-                    }
-                }
-
-                return result;
-            });
-        }
-
-        return this._addRequestsTransaction(requestModels) as BatchAddRequestsResult;
+        return this.transactions.batchAddRequests(requestModels);
     }
 
     updateRequest(requestModel: RequestModel): QueueOperationInfo {
-        if (!this._updateRequestTransaction) {
-            this._updateRequestTransaction = this.db.transaction((model) => {
-                // First we need to check the existing request to be
-                // able to return information about its handled state.
-                const orderNo = this.selectRequestOrderNoByModel(model);
-
-                // Undefined means that the request is not present in the queue.
-                // We need to insert it, to behave the same as API.
-                if (orderNo === undefined) {
-                    return this.addRequest(model);
-                }
-
-                // When updating the request, we need to make sure that
-                // the handled counts are updated correctly in all cases.
-                this.updateRequestByModel(model);
-                let handledCountAdjustment = 0;
-                const isRequestHandledStateChanging = typeof orderNo !== typeof model.orderNo;
-                const requestWasHandledBeforeUpdate = orderNo === null;
-
-                if (isRequestHandledStateChanging) handledCountAdjustment += 1;
-                if (requestWasHandledBeforeUpdate) handledCountAdjustment = -handledCountAdjustment;
-                this.adjustTotalAndHandledRequestCounts(model.queueId, 0, handledCountAdjustment);
-
-                // Again, it's important to return the state of the previous
-                // request, not the new one, because that's how API does it.
-                return new QueueOperationInfo(model.id, orderNo);
-            });
-        }
-        return this._updateRequestTransaction(requestModel) as QueueOperationInfo;
+        return this.transactions.updateRequest(requestModel);
     }
 
     deleteRequest(id: string): unknown {
-        if (!this._deleteRequestTransaction) {
-            this._deleteRequestTransaction = this.db.transaction(() => {
-                // TODO
-            });
-        }
-        return this._deleteRequestTransaction(id);
+        return this.transactions.deleteRequest(id);
     }
 
     prolongRequestLock(id: string, options: ProlongRequestLockOptions) {
-        if (!this._fetchRequestNotExpired) {
-            this._fetchRequestNotExpired = this.db.prepare(/* sql */`
-                SELECT id, orderNo FROM ${this.requestsTableName}
-                WHERE id = ?
-                AND orderNo IS NOT NULL
-            `);
-        }
-
-        this._initUpdateOrderNo();
-
-        if (!this._prolongRequestLockTransaction) {
-            this._prolongRequestLockTransaction = this.db.transaction((passedId, passedOptions) => {
-                const existingRequest = this._fetchRequestNotExpired.get(passedId) as { orderNo: number; id: string } | undefined;
-
-                if (!existingRequest) {
-                    throw new Error(`Request with ID ${passedId} was already handled or doesn't exist`);
-                }
-
-                const unlockTimestamp = Math.abs(existingRequest.orderNo) + passedOptions.lockSecs * 1000;
-                const newOrderNo = passedOptions.forefront ? -unlockTimestamp : unlockTimestamp;
-
-                this._updateOrderNo.run({ id: passedId, orderNo: newOrderNo });
-
-                return new Date(unlockTimestamp);
-            });
-        }
-
-        return this._prolongRequestLockTransaction(id, options);
+        return this.transactions.prolongRequestLock(id, options);
     }
 
     deleteRequestLock(id: string, options: RequestOptions) {
-        if (!this._fetchRequestNotExpiredAndLocked) {
-            this._fetchRequestNotExpiredAndLocked = this.db.prepare(/* sql */`
-                SELECT id FROM ${this.requestsTableName}
-                WHERE id = :id
-                AND orderNo IS NOT NULL
-                AND (
-                    orderNo > :currentTime
-                    OR orderNo < -(:currentTime)
-                )
-            `);
-        }
-
-        this._initUpdateOrderNo();
-
-        if (!this._deleteRequestLockTransaction) {
-            this._deleteRequestLockTransaction = this.db.transaction((passedId, { forefront }) => {
-                const timestamp = Date.now();
-
-                const existingRequest = this._fetchRequestNotExpiredAndLocked.get({
-                    id: passedId,
-                    currentTime: timestamp,
-                }) as { id: string } | undefined;
-
-                if (!existingRequest) {
-                    throw new Error(`Request with ID ${passedId} was already handled, doesn't exist, or is not locked`);
-                }
-
-                this._updateOrderNo.run({ id: passedId, orderNo: forefront ? -timestamp : timestamp });
-            });
-        }
-
-        return this._deleteRequestLockTransaction(id, options);
+        return this.transactions.deleteRequestLock(id, options);
     }
 
     listAndLockHead(queueId: string, limit: number, lockSecs: number): string[] {
-        if (!this._fetchRequestHeadThatWillBeLocked) {
-            this._fetchRequestHeadThatWillBeLocked = this.db.prepare(/* sql */`
-                SELECT id, "json", orderNo FROM ${this.requestsTableName}
-                WHERE queueId = CAST(:queueId as INTEGER)
-                AND orderNo IS NOT NULL
-                AND orderNo <= :currentTime
-                AND orderNo >= -(:currentTime)
-                ORDER BY orderNo ASC
-                LIMIT :limit
-            `);
-        }
-
-        this._initUpdateOrderNo();
-
-        if (!this._listAndLockHeadTransaction) {
-            this._listAndLockHeadTransaction = this.db.transaction((passedQueueId, passedLimit, passedLockSecs) => {
-                const timestamp = Date.now();
-
-                const requestsToLock = this._fetchRequestHeadThatWillBeLocked.all({
-                    queueId: passedQueueId,
-                    currentTime: timestamp,
-                    limit: passedLimit,
-                }) as { id: string; json: string; orderNo: number }[];
-
-                if (!requestsToLock.length) {
-                    return [];
-                }
-
-                for (const { id, orderNo } of requestsToLock) {
-                    const newOrderNo = (timestamp + passedLockSecs * 1000) * (orderNo > 0 ? 1 : -1);
-
-                    this._updateOrderNo.run({ id, orderNo: newOrderNo });
-                }
-
-                return requestsToLock.map(({ json }) => json);
-            });
-        }
-
-        return this._listAndLockHeadTransaction(queueId, limit, lockSecs);
+        return this.transactions.listAndLockHead(queueId, limit, lockSecs);
     }
 
-    private _initUpdateOrderNo() {
-        this._updateOrderNo ??= this.db.prepare(/* sql */`
-            UPDATE ${this.requestsTableName}
-            SET orderNo = :orderNo
-            WHERE id = :id
-        `);
+    private updateOrderNo({ id, orderNo }: { id: string; orderNo: number; }) {
+        this.statements.updateOrderNo.run({ id, orderNo });
     }
 
     private _createTables() {
@@ -602,6 +280,260 @@ export class RequestQueueEmulator {
             ON ${this.requestsTableName}(queueId, orderNo)
             WHERE orderNo IS NOT NULL
         `).run();
+    }
+
+    private _createStatements() {
+        this.statements = {
+            selectById: this.db.prepare(/* sql */`
+                SELECT *, CAST(id as TEXT) as id
+                FROM ${this.queueTableName}
+                WHERE id = ?
+            `),
+            deleteById: this.db.prepare(/* sql */`
+                DELETE FROM ${this.queueTableName}
+                WHERE id = CAST(? as INTEGER)
+            `),
+            selectByName: this.db.prepare(/* sql */`
+                SELECT *, CAST(id as TEXT) as id
+                FROM ${this.queueTableName}
+                WHERE name = ?
+            `),
+            insertByName: this.db.prepare(/* sql */`
+                INSERT INTO ${this.queueTableName}(name)
+                VALUES(?)
+            `),
+            selectModifiedAtById: this.db.prepare(/* sql */`
+                SELECT modifiedAt
+                FROM ${this.queueTableName}
+                WHERE id = ?
+            `).pluck(),
+            updateNameById: this.db.prepare(/* sql */`
+                UPDATE ${this.queueTableName}
+                SET name = :name
+                WHERE id = CAST(:id as INTEGER)
+            `),
+            updateModifiedAtById: this.db.prepare(/* sql */`
+                UPDATE ${this.queueTableName}
+                SET modifiedAt = ${TIMESTAMP_SQL}
+                WHERE id = CAST(? as INTEGER)
+            `),
+            updateAccessedAtById: this.db.prepare(/* sql */`
+                UPDATE ${this.queueTableName}
+                SET accessedAt = ${TIMESTAMP_SQL}
+                WHERE id = CAST(? as INTEGER)
+            `),
+            adjustTotalAndHandledRequestCounts: this.db.prepare(/* sql */`
+                UPDATE ${this.queueTableName}
+                SET totalRequestCount = totalRequestCount + :totalAdjustment,
+                    handledRequestCount = handledRequestCount + :handledAdjustment
+                WHERE id = CAST(:id as INTEGER)
+            `),
+            selectRequestOrderNoByModel: this.db.prepare(/* sql */`
+                SELECT orderNo FROM ${this.requestsTableName}
+                WHERE queueId = CAST(:queueId as INTEGER) AND id = :id
+            `).pluck(),
+            selectRequestJsonByModel: this.db.prepare(/* sql */`
+                SELECT "json" FROM ${this.requestsTableName}
+                WHERE queueId = CAST(:queueId as INTEGER) AND id = :id
+            `).pluck(),
+            selectRequestJsonsByQueueIdWithLimit: this.db.prepare(/* sql */`
+                SELECT "json" FROM ${this.requestsTableName}
+                WHERE queueId = CAST(:queueId as INTEGER) AND orderNo IS NOT NULL
+                LIMIT :limit
+            `).pluck(),
+            insertRequestByModel: this.db.prepare(/* sql */`
+                INSERT INTO ${this.requestsTableName}(
+                    id, queueId, orderNo, url, uniqueKey, method, retryCount, json
+                ) VALUES (
+                    :id, CAST(:queueId as INTEGER), :orderNo, :url, :uniqueKey, :method, :retryCount, :json
+                )
+            `),
+            updateRequestByModel: this.db.prepare(/* sql */`
+                UPDATE ${this.requestsTableName}
+                SET orderNo = :orderNo,
+                    url = :url,
+                    uniqueKey = :uniqueKey,
+                    method = :method,
+                    retryCount = :retryCount,
+                    json = :json
+                WHERE queueId = CAST(:queueId as INTEGER) AND id = :id
+            `),
+            deleteRequestById: this.db.prepare(/* sql */`
+                DELETE FROM ${this.requestsTableName}
+                WHERE id = ?
+            `),
+            fetchRequestNotExpired: this.db.prepare(/* sql */`
+                SELECT id, orderNo FROM ${this.requestsTableName}
+                WHERE id = ?
+                AND orderNo IS NOT NULL
+            `),
+            fetchRequestNotExpiredAndLocked: this.db.prepare(/* sql */`
+                SELECT id FROM ${this.requestsTableName}
+                WHERE id = :id
+                AND orderNo IS NOT NULL
+                AND (
+                    orderNo > :currentTime
+                    OR orderNo < -(:currentTime)
+                )
+            `),
+            fetchRequestHeadThatWillBeLocked: this.db.prepare(/* sql */`
+                SELECT id, "json", orderNo FROM ${this.requestsTableName}
+                WHERE queueId = CAST(:queueId as INTEGER)
+                AND orderNo IS NOT NULL
+                AND orderNo <= :currentTime
+                AND orderNo >= -(:currentTime)
+                ORDER BY orderNo ASC
+                LIMIT :limit
+            `),
+            updateOrderNo: this.db.prepare(/* sql */`
+                UPDATE ${this.requestsTableName}
+                SET orderNo = :orderNo
+                WHERE id = :id
+            `),
+        };
+    }
+
+    private _createTransactions() {
+        this.transactions = {
+            selectOrInsertByName: this.db.transaction((name) => {
+                if (name) {
+                    const storage = this.selectByName(name);
+                    if (storage) return storage;
+                }
+
+                const { lastInsertRowid } = this.insertByName(name);
+                return this.selectById(lastInsertRowid.toString());
+            }),
+            addRequest: this.db.transaction((model) => {
+                try {
+                    this.insertRequestByModel(model);
+                    const handledCountAdjustment = model.orderNo === null ? 1 : 0;
+                    this.adjustTotalAndHandledRequestCounts(model.queueId!, 1, handledCountAdjustment);
+                    // We return wasAlreadyHandled: false even though the request may
+                    // have been added as handled, because that's how API behaves.
+                    return new QueueOperationInfo(model.id!);
+                } catch (err) {
+                    if (err.code === ERROR_REQUEST_NOT_UNIQUE) {
+                        // If we got here it means that the request was already present.
+                        // We need to figure out if it were handled too.
+                        const orderNo = this.selectRequestOrderNoByModel(model);
+                        return new QueueOperationInfo(model.id!, orderNo);
+                    }
+                    if (err.code === ERROR_QUEUE_DOES_NOT_EXIST) {
+                        throw new Error(`Request queue with id: ${model.queueId} does not exist.`);
+                    }
+                    throw err;
+                }
+            }),
+            batchAddRequests: this.db.transaction((models) => {
+                const result: BatchAddRequestsResult = {
+                    processedRequests: [],
+                    unprocessedRequests: [],
+                };
+
+                for (const model of models) {
+                    try {
+                        this.insertRequestByModel(model);
+                        const handledCountAdjustment = model.orderNo == null ? 1 : 0;
+                        this.adjustTotalAndHandledRequestCounts(model.queueId!, 1, handledCountAdjustment);
+                        // We return wasAlreadyHandled: false even though the request may
+                        // have been added as handled, because that's how API behaves.
+                        result.processedRequests.push(new ProcessedRequest(model.id!, model.uniqueKey));
+                    } catch (err) {
+                        if (err.code === ERROR_REQUEST_NOT_UNIQUE) {
+                            const orderNo = this.selectRequestOrderNoByModel(model);
+                            // If we got here it means that the request was already present.
+                            result.processedRequests.push(new ProcessedRequest(model.id!, model.uniqueKey, orderNo));
+                        } else if (err.code === ERROR_QUEUE_DOES_NOT_EXIST) {
+                            throw new Error(`Request queue with id: ${model.queueId} does not exist.`);
+                        } else {
+                            throw err;
+                        }
+                    }
+                }
+
+                return result;
+            }),
+            updateRequest: this.db.transaction((model) => {
+                // First we need to check the existing request to be
+                // able to return information about its handled state.
+                const orderNo = this.selectRequestOrderNoByModel(model);
+
+                // Undefined means that the request is not present in the queue.
+                // We need to insert it, to behave the same as API.
+                if (orderNo === undefined) {
+                    return this.addRequest(model);
+                }
+
+                // When updating the request, we need to make sure that
+                // the handled counts are updated correctly in all cases.
+                this.updateRequestByModel(model);
+                let handledCountAdjustment = 0;
+                const isRequestHandledStateChanging = typeof orderNo !== typeof model.orderNo;
+                const requestWasHandledBeforeUpdate = orderNo === null;
+
+                if (isRequestHandledStateChanging) handledCountAdjustment += 1;
+                if (requestWasHandledBeforeUpdate) handledCountAdjustment = -handledCountAdjustment;
+                this.adjustTotalAndHandledRequestCounts(model.queueId!, 0, handledCountAdjustment);
+
+                // Again, it's important to return the state of the previous
+                // request, not the new one, because that's how API does it.
+                return new QueueOperationInfo(model.id!, orderNo);
+            }),
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            deleteRequest: this.db.transaction((_id) => {
+                // TODO
+            }),
+            prolongRequestLock: this.db.transaction((id, options) => {
+                const existingRequest = this.statements.fetchRequestNotExpired.get(id) as { orderNo: number; id: string } | undefined;
+
+                if (!existingRequest) {
+                    throw new Error(`Request with ID ${id} was already handled or doesn't exist`);
+                }
+
+                const unlockTimestamp = Math.abs(existingRequest.orderNo) + options.lockSecs * 1000;
+                const newOrderNo = options.forefront ? -unlockTimestamp : unlockTimestamp;
+
+                this.updateOrderNo({ id, orderNo: newOrderNo });
+
+                return new Date(unlockTimestamp);
+            }),
+            deleteRequestLock: this.db.transaction((id, { forefront }) => {
+                const timestamp = Date.now();
+
+                const existingRequest = this.statements.fetchRequestNotExpiredAndLocked.get({
+                    id,
+                    currentTime: timestamp,
+                }) as { id: string } | undefined;
+
+                if (!existingRequest) {
+                    throw new Error(`Request with ID ${id} was already handled, doesn't exist, or is not locked`);
+                }
+
+                this.updateOrderNo({ id, orderNo: forefront ? -timestamp : timestamp });
+            }),
+            listAndLockHead: this.db.transaction((queueId, limit, lockSecs) => {
+                const timestamp = Date.now();
+
+                const requestsToLock = this.statements.fetchRequestHeadThatWillBeLocked.all({
+                    queueId,
+                    currentTime: timestamp,
+                    limit,
+                }) as { id: string; json: string; orderNo: number }[];
+
+                if (!requestsToLock.length) {
+                    return [];
+                }
+
+                for (const { id, orderNo } of requestsToLock) {
+                    const newOrderNo = (timestamp + lockSecs * 1000) * (orderNo > 0 ? 1 : -1);
+
+                    this.updateOrderNo({ id, orderNo: newOrderNo });
+                }
+
+                return requestsToLock.map(({ json }) => json);
+            }),
+        };
     }
 }
 
