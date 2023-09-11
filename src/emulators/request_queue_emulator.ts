@@ -64,7 +64,7 @@ interface RequestQueueStatements {
     adjustTotalAndHandledRequestCounts: Statement<[{ id: string; totalAdjustment: number; handledAdjustment: number }]>;
     selectRequestOrderNoByModel: Statement<[requestModel: RequestModel]>;
     selectRequestJsonByModel: Statement<[{ requestId: string; queueId: string }]>;
-    selectRequestJsonsByQueueIdWithLimit: Statement<[{queueId: string, limit: number}]>;
+    selectRequestJsonsByQueueIdWithLimit: Statement<[{ queueId: string, limit: number }]>;
     insertRequestByModel: Statement<[requestModel: RequestModel]>;
     updateRequestByModel: Statement<[requestModel: RequestModel]>;
     deleteRequestById: Statement<[id: string]>;
@@ -334,7 +334,7 @@ export class RequestQueueEmulator {
             `).pluck(),
             selectRequestJsonByModel: this.db.prepare(/* sql */`
                 SELECT "json" FROM ${this.requestsTableName}
-                WHERE queueId = CAST(:queueId as INTEGER) AND id = :id
+                WHERE queueId = CAST(:queueId as INTEGER) AND id = :requestId
             `).pluck(),
             selectRequestJsonsByQueueIdWithLimit: this.db.prepare(/* sql */`
                 SELECT "json" FROM ${this.requestsTableName}
