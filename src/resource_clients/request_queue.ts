@@ -40,6 +40,10 @@ export interface QueueHead {
     items: RequestQueueHeadItem[];
 }
 
+export interface ListAndLockHeadResult extends QueueHead {
+    lockSecs: number;
+}
+
 export interface RequestModel {
     id?: string;
     queueId?: string;
@@ -67,6 +71,18 @@ export interface ListOptions {
 
 export interface RequestOptions {
     forefront?: boolean;
+}
+
+export interface ProlongRequestLockOptions extends RequestOptions {
+    lockSecs: number;
+}
+
+export interface ProlongRequestLockResult {
+    lockExpiresAt: Date;
+}
+
+export interface ListAndLockOptions extends ListOptions {
+    lockSecs: number;
 }
 
 export class RequestQueueClient {
@@ -231,6 +247,53 @@ export class RequestQueueClient {
     async deleteRequest(_id: string): Promise<never> {
         // TODO Deletion is done, but we also need to update request counts in a transaction.
         throw new Error('This method is not implemented in @apify/storage-local yet.');
+    }
+
+    async prolongRequestLock(id: string, options: ProlongRequestLockOptions): Promise<ProlongRequestLockResult> {
+        ow(id, ow.string);
+        ow(options, ow.object.exactShape({
+            lockSecs: ow.number,
+            forefront: ow.optional.boolean,
+        }));
+
+        this._getEmulator().updateAccessedAtById(this.id);
+        const lockExpiresAt = this._getEmulator().prolongRequestLock(id, options);
+
+        return { lockExpiresAt };
+    }
+
+    async deleteRequestLock(id: string, options: RequestOptions = {}) {
+        ow(id, ow.string);
+        ow(options, ow.object.exactShape({
+            forefront: ow.optional.boolean,
+        }));
+
+        this._getEmulator().updateAccessedAtById(this.id);
+        this._getEmulator().deleteRequestLock(id, options);
+    }
+
+    async listAndLockHead(options: ListAndLockOptions): Promise<ListAndLockHeadResult> {
+        ow(options, ow.object.exactShape({
+            limit: ow.optional.number.lessThanOrEqual(25),
+            lockSecs: ow.number,
+        }));
+
+        const {
+            limit = 25,
+            lockSecs,
+        } = options;
+
+        this._getEmulator().updateAccessedAtById(this.id);
+        const requestJsons = this._getEmulator().listAndLockHead(this.id, limit, lockSecs);
+
+        const queueModifiedAt = new Date(this._getEmulator().selectModifiedAtById(this.id));
+        return {
+            limit,
+            queueModifiedAt,
+            hadMultipleClients: false,
+            items: requestJsons.map((json) => this._jsonToRequest(json)),
+            lockSecs,
+        };
     }
 
     private _createRequestModel(request: RequestBody, forefront?: boolean): RequestModel {

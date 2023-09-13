@@ -1,4 +1,5 @@
 import { setTimeout as nativeSetTimeout } from 'timers';
+import { setTimeout as sleep } from 'timers/promises';
 import { ensureDirSync, readdirSync } from 'fs-extra';
 import { ArgumentError } from 'ow';
 import { join } from 'path';
@@ -982,6 +983,91 @@ describe('listHead', () => {
                 expect(err.message).toBe(`Request queue with id: ${nonExistantQueueName} does not exist.`);
             }
         });
+    });
+});
+
+describe('RequestQueue v2', () => {
+    const totalRequestsPerTest = 50;
+
+    function calculateHistogram(requests: { uniqueKey: string }[]) : number[] {
+        const histogram: number[] = [];
+        for (const item of requests) {
+            const key = item.uniqueKey;
+            const index = parseInt(key, 10);
+            histogram[index] = histogram[index] ? histogram[index] + 1 : 1;
+        }
+
+        return histogram;
+    }
+
+    async function getEmptyQueue(name: string) {
+        const queue = await storageLocal.requestQueues().getOrCreate(name);
+        await storageLocal.requestQueue(queue.id).delete();
+        const newQueue = await storageLocal.requestQueues().getOrCreate(name);
+        return storageLocal.requestQueue(newQueue.id);
+    }
+
+    function getUniqueRequests(count: number) {
+        return new Array(count).fill(0).map((_, i) => ({ url: `http://example.com/${i}`, uniqueKey: String(i) }));
+    }
+
+    test('listAndLockHead works as expected', async () => {
+        const queue = await getEmptyQueue('list-and-lock-head');
+        await queue.batchAddRequests(getUniqueRequests(totalRequestsPerTest));
+
+        const [{ items: firstFetch }, { items: secondFetch }] = await Promise.all([
+            queue.listAndLockHead({ limit: totalRequestsPerTest / 2, lockSecs: 60 }),
+            queue.listAndLockHead({ limit: totalRequestsPerTest / 2, lockSecs: 60 }),
+        ]);
+
+        const histogram = calculateHistogram([...firstFetch, ...secondFetch]);
+        expect(histogram).toEqual(Array(totalRequestsPerTest).fill(1));
+    });
+
+    test('lock timers work as expected (timeout unlocks)', async () => {
+        const queue = await getEmptyQueue('lock-timers');
+        await queue.batchAddRequests(getUniqueRequests(totalRequestsPerTest / 2));
+
+        const { items: firstFetch } = await queue.listAndLockHead({ limit: totalRequestsPerTest / 2, lockSecs: 2 });
+
+        await sleep(3000);
+
+        const { items: secondFetch } = await queue.listAndLockHead({ limit: totalRequestsPerTest / 2, lockSecs: 2 });
+
+        const histogram = calculateHistogram([...firstFetch, ...secondFetch]);
+        expect(histogram).toEqual(Array(totalRequestsPerTest / 2).fill(2));
+    });
+
+    test('prolongRequestLock works as expected ', async () => {
+        jest.useFakeTimers();
+        const queue = await getEmptyQueue('prolong-request-lock');
+        await queue.batchAddRequests(getUniqueRequests(1));
+
+        const { items: firstFetch } = await queue.listAndLockHead({ limit: 1, lockSecs: 60 });
+        await queue.prolongRequestLock(firstFetch[0].id, { lockSecs: 60 });
+        expect(firstFetch).toHaveLength(1);
+
+        jest.advanceTimersByTime(65000);
+        const { items: secondFetch } = await queue.listAndLockHead({ limit: 1, lockSecs: 60 });
+        expect(secondFetch).toHaveLength(0);
+
+        jest.advanceTimersByTime(65000);
+        const { items: thirdFetch } = await queue.listAndLockHead({ limit: 1, lockSecs: 60 });
+
+        expect(thirdFetch).toHaveLength(1);
+        jest.useRealTimers();
+    });
+
+    test('deleteRequestLock works as expected', async () => {
+        const queue = await getEmptyQueue('delete-request-lock');
+        await queue.batchAddRequests(getUniqueRequests(1));
+
+        const { items: firstFetch } = await queue.listAndLockHead({ limit: 1, lockSecs: 60 });
+        await queue.deleteRequestLock(firstFetch[0].id);
+
+        const { items: secondFetch } = await queue.listAndLockHead({ limit: 1, lockSecs: 60 });
+
+        expect(secondFetch[0]).toEqual(firstFetch[0]);
     });
 });
 
