@@ -204,6 +204,27 @@ describe('setRecord', () => {
     });
 });
 
+describe('recordExists', () => {
+    const storeName = 'first';
+    const startCount = TEST_STORES[1].recordCount;
+
+    test('retruns true for existing records', async () => {
+        let savedRecord = numToRecord(3);
+        let record = await storageLocal.keyValueStore(storeName).recordExists(savedRecord.key);
+        expect(record).toBeTruthy();
+
+        savedRecord = numToRecord(30);
+        record = await storageLocal.keyValueStore('second').recordExists(savedRecord.key);
+        expect(record).toBeTruthy();
+    });
+
+    test('returns false for non-existent records', async () => {
+        const savedRecord = numToRecord(startCount + 1);
+        const record = await storageLocal.keyValueStore('first').recordExists(savedRecord.key);
+        expect(record).toBeFalsy();
+    });
+});
+
 describe('getRecord', () => {
     const storeName = 'first';
     const startCount = TEST_STORES[1].recordCount;

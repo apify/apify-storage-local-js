@@ -190,6 +190,22 @@ export class KeyValueStoreClient {
         };
     }
 
+    /**
+     * Tests whether a record with the given key exists in the key-value store without retrieving its value.
+     * @param key The queried record key.
+     * @returns `true` if the record exists, `false` otherwise.
+     */
+    async recordExists(key: string): Promise<boolean> {
+        ow(key, ow.string);
+        try {
+            const result = await this._handleFile(key, stat);
+            return !!result;
+        } catch (err) {
+            if (err.code === 'ENOENT') return false;
+            throw new Error(`Error checking file '${key}' in directory '${this.storeDir}'.\nCause: ${err.message}`);
+        }
+    }
+
     async getRecord(key: string, options: KeyValueStoreClientGetRecordOptions = {}): Promise<KeyValueStoreRecord | undefined> {
         ow(key, ow.string);
         ow(options, ow.object.exactShape({
