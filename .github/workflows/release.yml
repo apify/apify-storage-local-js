@@ -34,7 +34,7 @@ jobs:
                     path: |
                         node_modules
                         build
-                    key: cache-${{ github.run_id }}-v14
+                    key: cache-${{ github.run_id }}-v16
             -   name: Install Dependencies
                 run: npm install
             -   name: Run Tests
@@ -57,7 +57,7 @@ jobs:
                     path: |
                         node_modules
                         build
-                    key: cache-${{ github.run_id }}-v14
+                    key: cache-${{ github.run_id }}-v16
             -   run: npm run lint
 
 
