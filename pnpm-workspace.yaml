@@ -1,0 +1,6 @@
+minimumReleaseAge: 1440
+minimumReleaseAgeExclude:
+  - "@apify/*"
+  - "@crawlee/*"
+onlyBuiltDependencies:
+  - better-sqlite3
