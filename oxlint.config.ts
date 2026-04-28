@@ -20,7 +20,17 @@ export default defineConfig({
                 // Tests use the `try { ... } catch (err) { expect(err)... }` pattern. Migrating
                 // to `await expect(...).rejects.toX(...)` is out of scope for the lint migration.
                 'jest/no-conditional-expect': 'off',
+                'vitest/no-conditional-expect': 'off',
+                // Some assertions live in helper functions (e.g. testTaxNumber) and a handful of
+                // intentionally-empty `test.skip(...)` placeholders trip the rule. Too noisy to
+                // enforce in this repo.
+                'jest/expect-expect': 'off',
+                'vitest/expect-expect': 'off',
+                // Skipped tests are kept intentionally as TODOs for the request-queue v2 work.
                 'jest/no-disabled-tests': 'off',
+                'vitest/no-disabled-tests': 'off',
+                // Test files export shared helper types (e.g. `TestQueue` interface).
+                'jest/no-export': 'off',
             },
         },
     ],
