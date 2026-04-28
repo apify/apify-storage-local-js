@@ -1,9 +1,24 @@
 # This workflow runs for every pull request to lint and test the proposed changes.
+# It is also called from the release flow as a reusable workflow.
 
 name: Check
 
 on:
     pull_request:
+
+    # Push to master will trigger code checks.
+    push:
+        branches:
+            - master
+        tags-ignore:
+            - '**' # Ignore all tags to prevent duplicate builds when tags are pushed.
+
+    # Release flow will trigger checks manually.
+    workflow_call:
+
+concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
 
 jobs:
     build_and_test:
@@ -14,7 +29,7 @@ jobs:
         strategy:
             matrix:
                 os: [ ubuntu-latest ]
-                node-version: [ 18, 20, 22, 24 ]
+                node-version: [ 20, 22, 24 ]
 
         steps:
             -   uses: actions/checkout@v5
