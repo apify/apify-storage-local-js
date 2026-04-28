@@ -10,7 +10,6 @@ on:
         types: [ published ]
 
 jobs:
-    # NPM install is done in a separate job and cached to speed up the following jobs.
     build_and_test:
         name: Build & Test
         if: ${{ !contains(github.event.head_commit.message, '[skip ci]') }}
@@ -19,7 +18,7 @@ jobs:
         strategy:
             matrix:
                 os: [ ubuntu-latest ]
-                node-version: [ 16, 18, 20 ]
+                node-version: [ 18, 20, 22, 24 ]
 
         steps:
             -   uses: actions/checkout@v5
@@ -27,18 +26,10 @@ jobs:
                 uses: actions/setup-node@v6
                 with:
                     node-version: ${{ matrix.node-version }}
-            -   name: Cache Node Modules
-                if: ${{ matrix.node-version == 16 }}
-                uses: actions/cache@v4
-                with:
-                    path: |
-                        node_modules
-                        build
-                    key: cache-${{ github.run_id }}-v16
-            -   name: Install Dependencies
-                run: npm install
+            -   name: Install pnpm and dependencies
+                uses: apify/workflows/pnpm-install@main
             -   name: Run Tests
-                run: npm test
+                run: pnpm test
 
     lint:
         name: Lint
@@ -47,18 +38,13 @@ jobs:
 
         steps:
             -   uses: actions/checkout@v5
-            -   name: Use Node.js 16
+            -   name: Use Node.js 24
                 uses: actions/setup-node@v6
                 with:
-                    node-version: 16
-            -   name: Load Cache
-                uses: actions/cache@v4
-                with:
-                    path: |
-                        node_modules
-                        build
-                    key: cache-${{ github.run_id }}-v16
-            -   run: npm run lint
+                    node-version: 24
+            -   name: Install pnpm and dependencies
+                uses: apify/workflows/pnpm-install@main
+            -   run: pnpm lint
 
 
     # The deploy job is long but there are only 2 important parts. NPM publish
@@ -71,15 +57,10 @@ jobs:
             -   uses: actions/checkout@v5
             -   uses: actions/setup-node@v6
                 with:
-                    node-version: 16
+                    node-version: 24
                     registry-url: https://registry.npmjs.org/
-            -   name: Load Cache
-                uses: actions/cache@v4
-                with:
-                    path: |
-                        node_modules
-                        build
-                    key: cache-${{ github.run_id }}-v16
+            -   name: Install pnpm and dependencies
+                uses: apify/workflows/pnpm-install@main
             - # Determine if this is a beta or latest release
                 name: Set Release Tag
                 run: echo "RELEASE_TAG=$(if [ ${{ github.event_name }} = release ]; then echo latest; else echo beta; fi)" >> $GITHUB_ENV
@@ -88,7 +69,7 @@ jobs:
                 if: env.RELEASE_TAG == 'beta'
                 run: node ./.github/scripts/before-beta-release.js
             -   name: Publish to NPM
-                run: NODE_AUTH_TOKEN=${{secrets.NPM_TOKEN}} npm publish --tag ${{ env.RELEASE_TAG }} --access public
+                run: NODE_AUTH_TOKEN=${{secrets.NPM_TOKEN}} pnpm publish --tag ${{ env.RELEASE_TAG }} --access public --no-git-checks
             - # Latest version is tagged by the release process so we only tag beta here.
                 name: Tag Version
                 if: env.RELEASE_TAG == 'beta'
