@@ -1,6 +1,6 @@
 import { emptyDirSync, ensureDirSync, readdirSync, readFile, writeFileSync } from 'fs-extra';
-import { join } from 'path';
-import stream from 'stream';
+import { join } from 'node:path';
+import stream from 'node:stream';
 import { ApifyStorageLocal } from '../src/index';
 import { STORAGE_NAMES } from '../src/consts';
 import { prepareTestDir, removeTestDir } from './_tools';

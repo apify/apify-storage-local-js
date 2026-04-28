@@ -10,14 +10,13 @@
         "experimentalDecorators": true,
         "forceConsistentCasingInFileNames": true,
         "importHelpers": true,
-        "importsNotUsedAsValues": "remove",
         "incremental": true,
         "lib": [
             "esnext",
             "dom"
         ],
-        "module": "CommonJS",
-        "moduleResolution": "Node",
+        "module": "Node16",
+        "moduleResolution": "Node16",
         "useUnknownInCatchVariables": false,
         "newLine": "lf",
         "noEmitHelpers": true,

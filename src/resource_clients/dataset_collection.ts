@@ -1,6 +1,6 @@
 import { ensureDir, stat } from 'fs-extra';
 import ow from 'ow';
-import { join } from 'path';
+import { join } from 'node:path';
 
 export interface DatasetCollectionClientOptions {
     storageDir: string;

@@ -1,6 +1,6 @@
 import { move, remove, stat, readdirSync, readFile, utimes, writeFile } from 'fs-extra';
 import ow from 'ow';
-import { join, dirname, parse } from 'path';
+import { join, dirname, parse } from 'node:path';
 import type { DatasetCollectionData } from './dataset_collection';
 
 /**
@@ -167,7 +167,7 @@ export class DatasetClient {
         ));
 
         items = this._normalizeItems(items);
-        const promises = items.map((item) => {
+        const promises = items.map(async (item) => {
             this.itemCount!++;
 
             // We normalized the items to objects and now stringify them back to JSON,
@@ -270,7 +270,7 @@ export class DatasetClient {
             promise = utimes(this.storeDir, now, now);
         } else {
             promise = stat(this.storeDir)
-                .then((stats) => utimes(this.storeDir, now, stats.mtime));
+                .then(async (stats) => utimes(this.storeDir, now, stats.mtime));
         }
         promise.catch(() => { /* we don't care that much if it sometimes fails */ });
     }

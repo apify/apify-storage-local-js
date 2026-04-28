@@ -1,9 +1,9 @@
 import { stat, move, remove, readdir, createReadStream, readFile, utimes, createWriteStream, writeFile, unlink } from 'fs-extra';
 import mime from 'mime-types';
 import ow from 'ow';
-import { join, dirname, parse, resolve } from 'path';
-import stream from 'stream';
-import util from 'util';
+import { join, dirname, parse, resolve } from 'node:path';
+import stream from 'node:stream';
+import util from 'node:util';
 import { isStream, isBuffer } from '../utils';
 import { maybeParseBody } from '../body_parser';
 import { DEFAULT_API_PARAM_LIMIT } from '../consts';
@@ -379,7 +379,7 @@ export class KeyValueStoreClient {
             promise = utimes(this.storeDir, now, now);
         } else {
             promise = stat(this.storeDir)
-                .then((stats) => utimes(this.storeDir, now, stats.mtime));
+                .then(async (stats) => utimes(this.storeDir, now, stats.mtime));
         }
         promise.catch(() => { /* we don't care that much if it sometimes fails */ });
     }

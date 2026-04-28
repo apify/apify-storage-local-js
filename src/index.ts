@@ -1,7 +1,7 @@
 import { ensureDirSync, pathExists, pathExistsSync, readdirSync } from 'fs-extra';
 import ow from 'ow';
-import { readdir, rm } from 'fs/promises';
-import { join, resolve } from 'path';
+import { readdir, rm } from 'node:fs/promises';
+import { join, resolve } from 'node:path';
 import log from '@apify/log';
 import { ENV_VARS, KEY_VALUE_STORE_KEYS, LOCAL_ENV_VARS } from '@apify/consts';
 import { STORAGE_NAMES, STORAGE_TYPES } from './consts';

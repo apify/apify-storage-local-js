@@ -1,12 +1,13 @@
-import { setTimeout as nativeSetTimeout } from 'timers';
-import { setTimeout as sleep } from 'timers/promises';
+import { setTimeout as nativeSetTimeout } from 'node:timers';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { ensureDirSync, readdirSync } from 'fs-extra';
 import { ArgumentError } from 'ow';
-import { join } from 'path';
+import { join } from 'node:path';
 import type { Database, Statement } from 'better-sqlite3';
 import { ApifyStorageLocal } from '../src/index';
 import { STORAGE_NAMES, DATABASE_FILE_NAME } from '../src/consts';
-import { BatchAddRequestsResult, RequestQueueEmulator } from '../src/emulators/request_queue_emulator';
+import type { BatchAddRequestsResult} from '../src/emulators/request_queue_emulator';
+import { RequestQueueEmulator } from '../src/emulators/request_queue_emulator';
 import { uniqueKeyToRequestId } from '../src/utils';
 import { prepareTestDir, removeTestDir } from './_tools';
 import type { DatabaseConnectionCache } from '../src/database_connection_cache';
@@ -1038,7 +1039,7 @@ describe('RequestQueue v2', () => {
         expect(histogram).toEqual(Array(totalRequestsPerTest / 2).fill(2));
     });
 
-    test('prolongRequestLock works as expected ', async () => {
+    test('prolongRequestLock works as expected', async () => {
         jest.useFakeTimers();
         const queue = await getEmptyQueue('prolong-request-lock');
         await queue.batchAddRequests(getUniqueRequests(1));

@@ -1,8 +1,9 @@
 import { ensureDir } from 'fs-extra';
 import ow from 'ow';
-import { join } from 'path';
+import { join } from 'node:path';
 import type { DatabaseConnectionCache } from '../database_connection_cache';
-import { RequestQueueEmulator, RequestQueueInfo } from '../emulators/request_queue_emulator';
+import type { RequestQueueInfo } from '../emulators/request_queue_emulator';
+import { RequestQueueEmulator } from '../emulators/request_queue_emulator';
 import { mapRawDataToRequestQueueInfo } from '../utils';
 
 export interface RequestQueueCollectionClientOptions {

@@ -1,8 +1,8 @@
 import type { Readable } from 'node:stream';
-import { createHash } from 'crypto';
+import { createHash } from 'node:crypto';
 import ow from 'ow';
 import { REQUEST_ID_LENGTH } from './consts';
-import { RawQueueTableData, RequestQueueInfo } from './emulators/request_queue_emulator';
+import type { RawQueueTableData, RequestQueueInfo } from './emulators/request_queue_emulator';
 
 /**
  * Removes all properties with a null value
