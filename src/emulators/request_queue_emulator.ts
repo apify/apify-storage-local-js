@@ -12,7 +12,7 @@ const ERROR_QUEUE_DOES_NOT_EXIST = 'SQLITE_CONSTRAINT_FOREIGNKEY';
 
 export interface RequestQueueEmulatorOptions {
     queueDir: string;
-    dbConnections: DatabaseConnectionCache
+    dbConnections: DatabaseConnectionCache;
 }
 
 interface ErrorWithCode extends Error {
@@ -64,14 +64,14 @@ interface RequestQueueStatements {
     adjustTotalAndHandledRequestCounts: Statement<[{ id: string; totalAdjustment: number; handledAdjustment: number }]>;
     selectRequestOrderNoByModel: Statement<[requestModel: RequestModel]>;
     selectRequestJsonByModel: Statement<[{ requestId: string; queueId: string }]>;
-    selectRequestJsonsByQueueIdWithLimit: Statement<[{ queueId: string, limit: number }]>;
+    selectRequestJsonsByQueueIdWithLimit: Statement<[{ queueId: string; limit: number }]>;
     insertRequestByModel: Statement<[requestModel: RequestModel]>;
     updateRequestByModel: Statement<[requestModel: RequestModel]>;
     deleteRequestById: Statement<[id: string]>;
     fetchRequestNotExpired: Statement<[id: string]>;
     fetchRequestNotExpiredAndLocked: Statement<{ id: string; currentTime: number }>;
     updateOrderNo: Statement<{ id: string; orderNo: number }>;
-    fetchRequestHeadThatWillBeLocked: Statement<{ queueId: string; limit: number; currentTime: number; }>;
+    fetchRequestHeadThatWillBeLocked: Statement<{ queueId: string; limit: number; currentTime: number }>;
 }
 
 interface RequestQueueTransactions {
@@ -107,7 +107,9 @@ export class RequestQueueEmulator {
             this.db = dbConnections.openConnection(this.dbPath);
         } catch (err) {
             if (err.code !== 'ENOENT') throw err;
-            const newError = new Error(`Request queue with id: ${parse(queueDir).name} does not exist.`) as ErrorWithCode;
+            const newError = new Error(
+                `Request queue with id: ${parse(queueDir).name} does not exist.`,
+            ) as ErrorWithCode;
             newError.code = 'ENOENT';
             throw newError;
         }
@@ -224,12 +226,13 @@ export class RequestQueueEmulator {
         return this.transactions.listAndLockHead(queueId, limit, lockSecs);
     }
 
-    private updateOrderNo({ id, orderNo }: { id: string; orderNo: number; }) {
+    private updateOrderNo({ id, orderNo }: { id: string; orderNo: number }) {
         this.statements.updateOrderNo.run({ id, orderNo });
     }
 
     private _createTables() {
-        this.db.prepare(`
+        this.db
+            .prepare(`
             CREATE TABLE IF NOT EXISTS ${this.queueTableName}(
                 id INTEGER PRIMARY KEY,
                 name TEXT UNIQUE,
@@ -240,8 +243,10 @@ export class RequestQueueEmulator {
                 handledRequestCount INTEGER DEFAULT 0,
                 pendingRequestCount INTEGER GENERATED ALWAYS AS (totalRequestCount - handledRequestCount) VIRTUAL
             )
-        `).run();
-        this.db.prepare(`
+        `)
+            .run();
+        this.db
+            .prepare(`
             CREATE TABLE IF NOT EXISTS ${this.requestsTableName}(
                 queueId INTEGER NOT NULL REFERENCES ${this.queueTableName}(id) ON DELETE CASCADE,
                 id TEXT NOT NULL,
@@ -253,7 +258,8 @@ export class RequestQueueEmulator {
                 json TEXT NOT NULL,
                 PRIMARY KEY (queueId, id, uniqueKey)
             )
-        `).run();
+        `)
+            .run();
     }
 
     private _createTriggers() {
@@ -275,80 +281,90 @@ export class RequestQueueEmulator {
     }
 
     private _createIndexes() {
-        this.db.prepare(`
+        this.db
+            .prepare(`
             CREATE INDEX IF NOT EXISTS I_queueId_orderNo
             ON ${this.requestsTableName}(queueId, orderNo)
             WHERE orderNo IS NOT NULL
-        `).run();
+        `)
+            .run();
     }
 
     private _createStatements() {
         this.statements = {
-            selectById: this.db.prepare(/* sql */`
+            selectById: this.db.prepare(/* sql */ `
                 SELECT *, CAST(id as TEXT) as id
                 FROM ${this.queueTableName}
                 WHERE id = ?
             `),
-            deleteById: this.db.prepare(/* sql */`
+            deleteById: this.db.prepare(/* sql */ `
                 DELETE FROM ${this.queueTableName}
                 WHERE id = CAST(? as INTEGER)
             `),
-            selectByName: this.db.prepare(/* sql */`
+            selectByName: this.db.prepare(/* sql */ `
                 SELECT *, CAST(id as TEXT) as id
                 FROM ${this.queueTableName}
                 WHERE name = ?
             `),
-            insertByName: this.db.prepare(/* sql */`
+            insertByName: this.db.prepare(/* sql */ `
                 INSERT INTO ${this.queueTableName}(name)
                 VALUES(?)
             `),
-            selectModifiedAtById: this.db.prepare(/* sql */`
+            selectModifiedAtById: this.db
+                .prepare(/* sql */ `
                 SELECT modifiedAt
                 FROM ${this.queueTableName}
                 WHERE id = ?
-            `).pluck(),
-            updateNameById: this.db.prepare(/* sql */`
+            `)
+                .pluck(),
+            updateNameById: this.db.prepare(/* sql */ `
                 UPDATE ${this.queueTableName}
                 SET name = :name
                 WHERE id = CAST(:id as INTEGER)
             `),
-            updateModifiedAtById: this.db.prepare(/* sql */`
+            updateModifiedAtById: this.db.prepare(/* sql */ `
                 UPDATE ${this.queueTableName}
                 SET modifiedAt = ${TIMESTAMP_SQL}
                 WHERE id = CAST(? as INTEGER)
             `),
-            updateAccessedAtById: this.db.prepare(/* sql */`
+            updateAccessedAtById: this.db.prepare(/* sql */ `
                 UPDATE ${this.queueTableName}
                 SET accessedAt = ${TIMESTAMP_SQL}
                 WHERE id = CAST(? as INTEGER)
             `),
-            adjustTotalAndHandledRequestCounts: this.db.prepare(/* sql */`
+            adjustTotalAndHandledRequestCounts: this.db.prepare(/* sql */ `
                 UPDATE ${this.queueTableName}
                 SET totalRequestCount = totalRequestCount + :totalAdjustment,
                     handledRequestCount = handledRequestCount + :handledAdjustment
                 WHERE id = CAST(:id as INTEGER)
             `),
-            selectRequestOrderNoByModel: this.db.prepare(/* sql */`
+            selectRequestOrderNoByModel: this.db
+                .prepare(/* sql */ `
                 SELECT orderNo FROM ${this.requestsTableName}
                 WHERE queueId = CAST(:queueId as INTEGER) AND id = :id
-            `).pluck(),
-            selectRequestJsonByModel: this.db.prepare(/* sql */`
+            `)
+                .pluck(),
+            selectRequestJsonByModel: this.db
+                .prepare(/* sql */ `
                 SELECT "json" FROM ${this.requestsTableName}
                 WHERE queueId = CAST(:queueId as INTEGER) AND id = :requestId
-            `).pluck(),
-            selectRequestJsonsByQueueIdWithLimit: this.db.prepare(/* sql */`
+            `)
+                .pluck(),
+            selectRequestJsonsByQueueIdWithLimit: this.db
+                .prepare(/* sql */ `
                 SELECT "json" FROM ${this.requestsTableName}
                 WHERE queueId = CAST(:queueId as INTEGER) AND orderNo IS NOT NULL
                 LIMIT :limit
-            `).pluck(),
-            insertRequestByModel: this.db.prepare(/* sql */`
+            `)
+                .pluck(),
+            insertRequestByModel: this.db.prepare(/* sql */ `
                 INSERT INTO ${this.requestsTableName}(
                     id, queueId, orderNo, url, uniqueKey, method, retryCount, json
                 ) VALUES (
                     :id, CAST(:queueId as INTEGER), :orderNo, :url, :uniqueKey, :method, :retryCount, :json
                 )
             `),
-            updateRequestByModel: this.db.prepare(/* sql */`
+            updateRequestByModel: this.db.prepare(/* sql */ `
                 UPDATE ${this.requestsTableName}
                 SET orderNo = :orderNo,
                     url = :url,
@@ -358,16 +374,16 @@ export class RequestQueueEmulator {
                     json = :json
                 WHERE queueId = CAST(:queueId as INTEGER) AND id = :id
             `),
-            deleteRequestById: this.db.prepare(/* sql */`
+            deleteRequestById: this.db.prepare(/* sql */ `
                 DELETE FROM ${this.requestsTableName}
                 WHERE id = ?
             `),
-            fetchRequestNotExpired: this.db.prepare(/* sql */`
+            fetchRequestNotExpired: this.db.prepare(/* sql */ `
                 SELECT id, orderNo FROM ${this.requestsTableName}
                 WHERE id = ?
                 AND orderNo IS NOT NULL
             `),
-            fetchRequestNotExpiredAndLocked: this.db.prepare(/* sql */`
+            fetchRequestNotExpiredAndLocked: this.db.prepare(/* sql */ `
                 SELECT id FROM ${this.requestsTableName}
                 WHERE id = :id
                 AND orderNo IS NOT NULL
@@ -376,7 +392,7 @@ export class RequestQueueEmulator {
                     OR orderNo < -(:currentTime)
                 )
             `),
-            fetchRequestHeadThatWillBeLocked: this.db.prepare(/* sql */`
+            fetchRequestHeadThatWillBeLocked: this.db.prepare(/* sql */ `
                 SELECT id, "json", orderNo FROM ${this.requestsTableName}
                 WHERE queueId = CAST(:queueId as INTEGER)
                 AND orderNo IS NOT NULL
@@ -385,7 +401,7 @@ export class RequestQueueEmulator {
                 ORDER BY orderNo ASC
                 LIMIT :limit
             `),
-            updateOrderNo: this.db.prepare(/* sql */`
+            updateOrderNo: this.db.prepare(/* sql */ `
                 UPDATE ${this.requestsTableName}
                 SET orderNo = :orderNo
                 WHERE id = :id
@@ -485,7 +501,9 @@ export class RequestQueueEmulator {
                 // TODO
             }),
             prolongRequestLock: this.db.transaction((id, options) => {
-                const existingRequest = this.statements.fetchRequestNotExpired.get(id) as { orderNo: number; id: string } | undefined;
+                const existingRequest = this.statements.fetchRequestNotExpired.get(id) as
+                    | { orderNo: number; id: string }
+                    | undefined;
 
                 if (!existingRequest) {
                     throw new Error(`Request with ID ${id} was already handled or doesn't exist`);

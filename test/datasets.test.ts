@@ -223,17 +223,16 @@ describe('pushItems', () => {
         });
 
         test('when individual items are arrays', async () => {
-            const arrayOfArrays = [
-                { foo: 'bar' },
-                [{ one: 1 }, { two: 2 }],
-            ];
+            const arrayOfArrays = [{ foo: 'bar' }, [{ one: 1 }, { two: 2 }]];
 
             expect.hasAssertions();
             try {
                 // @ts-expect-error Making sure datasets only allow a single JSON object
                 await storageLocal.dataset(datasetName).pushItems(arrayOfArrays);
             } catch (err) {
-                expect(err.message).toMatch('Each dataset item can only be a single JSON object, not an array. Received:');
+                expect(err.message).toMatch(
+                    'Each dataset item can only be a single JSON object, not an array. Received:',
+                );
             }
         });
     });

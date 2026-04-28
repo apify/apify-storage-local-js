@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import type { Database, Statement } from 'better-sqlite3';
 import { ApifyStorageLocal } from '../src/index';
 import { STORAGE_NAMES, DATABASE_FILE_NAME } from '../src/consts';
-import type { BatchAddRequestsResult} from '../src/emulators/request_queue_emulator';
+import type { BatchAddRequestsResult } from '../src/emulators/request_queue_emulator';
 import { RequestQueueEmulator } from '../src/emulators/request_queue_emulator';
 import { uniqueKeyToRequestId } from '../src/utils';
 import { prepareTestDir, removeTestDir } from './_tools';
@@ -14,9 +14,10 @@ import type { DatabaseConnectionCache } from '../src/database_connection_cache';
 import type { RequestModel } from '../src/resource_clients/request_queue';
 
 // TODO: switch to timers/promises when targeting Node.js 16
-const setTimeout = (ms = 1) => new Promise((resolve) => {
-    nativeSetTimeout(resolve, ms);
-});
+const setTimeout = (ms = 1) =>
+    new Promise((resolve) => {
+        nativeSetTimeout(resolve, ms);
+    });
 
 const REQUESTS_TABLE_NAME = `${STORAGE_NAMES.REQUEST_QUEUES}_requests`;
 
@@ -96,19 +97,23 @@ describe('sanity checks for seeded data', () => {
     Object.values(TEST_QUEUES).forEach((queue) => {
         test('queues table exists', () => {
             const db = queueNameToDb(queue.name);
-            const { name } = db.prepare(`
+            const { name } = db
+                .prepare(`
                 SELECT name FROM sqlite_master
                 WHERE type='table' AND name='${STORAGE_NAMES.REQUEST_QUEUES}';
-            `).get() as any;
+            `)
+                .get() as any;
             expect(name).toBe(STORAGE_NAMES.REQUEST_QUEUES);
         });
 
         test('requests table exists', () => {
             const db = queueNameToDb(queue.name);
-            const { name } = db.prepare(`
+            const { name } = db
+                .prepare(`
                 SELECT name FROM sqlite_master
                 WHERE type='table' AND name='${REQUESTS_TABLE_NAME}';
-            `).get() as any;
+            `)
+                .get() as any;
             expect(name).toBe(REQUESTS_TABLE_NAME);
         });
 
@@ -143,11 +148,13 @@ describe('timestamps:', () => {
         const beforeUpdate = selectTimestamps.get() as any;
         const request = numToRequest(1);
         await setTimeout(1);
-        db.prepare(`
+        db
+            .prepare(`
             UPDATE ${REQUESTS_TABLE_NAME}
             SET retryCount = 10
             WHERE queueId = ${QUEUE_ID} AND id = ?
-        `).run(request.id) as any;
+        `)
+            .run(request.id) as any;
         const afterUpdate = selectTimestamps.get() as any;
         expect(new Date(afterUpdate.modifiedAt).getTime()).toBeGreaterThan(new Date(beforeUpdate.modifiedAt).getTime());
         expect(new Date(afterUpdate.accessedAt).getTime()).toBeGreaterThan(new Date(beforeUpdate.accessedAt).getTime());
@@ -172,10 +179,12 @@ describe('timestamps:', () => {
         const beforeUpdate = selectTimestamps.get() as any;
         const request = numToRequest(1);
         await setTimeout(1);
-        db.prepare(`
+        db
+            .prepare(`
             DELETE FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND id = ?
-        `).run(request.id) as any;
+        `)
+            .run(request.id) as any;
         const afterUpdate = selectTimestamps.get() as any;
         expect(new Date(afterUpdate.modifiedAt).getTime()).toBeGreaterThan(new Date(beforeUpdate.modifiedAt).getTime());
         expect(new Date(afterUpdate.accessedAt).getTime()).toBeGreaterThan(new Date(beforeUpdate.accessedAt).getTime());
@@ -303,17 +312,11 @@ describe('request counts:', () => {
     });
 
     /* eslint-disable @typescript-eslint/no-empty-function */
-    test.skip('deleting a request decrements totalRequestCount', async () => {
+    test.skip('deleting a request decrements totalRequestCount', async () => {});
 
-    });
+    test.skip('deleting a handled request decrements handledRequestCount', async () => {});
 
-    test.skip('deleting a handled request decrements handledRequestCount', async () => {
-
-    });
-
-    test.skip('deleting an pending request does not decrement handledRequestCount', async () => {
-
-    });
+    test.skip('deleting an pending request does not decrement handledRequestCount', async () => {});
     /* eslint-enable @typescript-eslint/no-empty-function */
 });
 
@@ -386,10 +389,12 @@ describe('addRequest', () => {
         });
         expect(counter.requests(queueName)).toBe(startCount + 1);
 
-        const requestModel = db.prepare(`
+        const requestModel = db
+            .prepare(`
             SELECT * FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND id = ?
-        `).get(newRequestId) as any;
+        `)
+            .get(newRequestId) as any;
         expect(requestModel.queueId).toBe(QUEUE_ID);
         expect(requestModel.id).toBe(newRequestId);
         expect(requestModel.url).toBe(newRequest.url);
@@ -421,10 +426,12 @@ describe('addRequest', () => {
         } as const;
 
         await storageLocal.requestQueue(queueName).addRequest(newRequest);
-        const requestModel = db.prepare(`
+        const requestModel = db
+            .prepare(`
             SELECT * FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND id = ?
-        `).get(requestId) as any;
+        `)
+            .get(requestId) as any;
         expect(requestModel.id).toBe(requestId);
         expect(requestModel.method).toBe('GET');
         expect(typeof requestModel.orderNo).toBe('number');
@@ -465,11 +472,14 @@ describe('addRequest', () => {
 
         await storageLocal.requestQueue(queueName).addRequest(newRequest, { forefront: true });
         expect(counter.requests(queueName)).toBe(startCount + 1);
-        const firstId = db.prepare(`
+        const firstId = db
+            .prepare(`
             SELECT id FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND orderNo IS NOT NULL
             LIMIT 1
-        `).pluck().get();
+        `)
+            .pluck()
+            .get();
         expect(firstId).toBe(newRequestId);
     });
 
@@ -544,7 +554,9 @@ describe('batchAddRequests', () => {
         const newRequestId2 = newRequest2.id!;
         newRequest2.id = undefined;
 
-        const queueOperationInfo = await storageLocal.requestQueue(queueName).batchAddRequests([newRequest1, newRequest2]);
+        const queueOperationInfo = await storageLocal
+            .requestQueue(queueName)
+            .batchAddRequests([newRequest1, newRequest2]);
         expect(queueOperationInfo).toEqual<BatchAddRequestsResult>({
             processedRequests: [
                 {
@@ -564,10 +576,12 @@ describe('batchAddRequests', () => {
         });
         expect(counter.requests(queueName)).toBe(startCount + 2);
 
-        const requestModel1 = db.prepare(`
+        const requestModel1 = db
+            .prepare(`
             SELECT * FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND id = ?
-        `).get(newRequestId1) as any;
+        `)
+            .get(newRequestId1) as any;
         expect(requestModel1.queueId).toBe(QUEUE_ID);
         expect(requestModel1.id).toBe(newRequestId1);
         expect(requestModel1.url).toBe(newRequest1.url);
@@ -580,10 +594,12 @@ describe('batchAddRequests', () => {
         expect(savedRequest1.id).toBe(newRequestId1);
         expect(savedRequest1).toMatchObject({ ...newRequest1, id: newRequestId1 });
 
-        const requestModel2 = db.prepare(`
+        const requestModel2 = db
+            .prepare(`
             SELECT * FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND id = ?
-        `).get(newRequestId2) as any;
+        `)
+            .get(newRequestId2) as any;
         expect(requestModel2.queueId).toBe(QUEUE_ID);
         expect(requestModel2.id).toBe(newRequestId2);
         expect(requestModel2.url).toBe(newRequest2.url);
@@ -600,12 +616,14 @@ describe('batchAddRequests', () => {
     test('succeeds when request is already present', async () => {
         const queueOperationInfo = await storageLocal.requestQueue(queueName).batchAddRequests([request]);
         expect(queueOperationInfo).toEqual<BatchAddRequestsResult>({
-            processedRequests: [{
-                requestId: uniqueKeyToRequestId(request.url),
-                uniqueKey: request.uniqueKey,
-                wasAlreadyHandled: false,
-                wasAlreadyPresent: true,
-            }],
+            processedRequests: [
+                {
+                    requestId: uniqueKeyToRequestId(request.url),
+                    uniqueKey: request.uniqueKey,
+                    wasAlreadyHandled: false,
+                    wasAlreadyPresent: true,
+                },
+            ],
             unprocessedRequests: [],
         });
         expect(counter.requests(queueName)).toBe(startCount);
@@ -619,10 +637,12 @@ describe('batchAddRequests', () => {
         } as const;
 
         await storageLocal.requestQueue(queueName).batchAddRequests([newRequest]);
-        const requestModel = db.prepare(`
+        const requestModel = db
+            .prepare(`
             SELECT * FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND id = ?
-        `).get(requestId) as any;
+        `)
+            .get(requestId) as any;
         expect(requestModel.id).toBe(requestId);
         expect(requestModel.method).toBe('GET');
         expect(typeof requestModel.orderNo).toBe('number');
@@ -637,12 +657,14 @@ describe('batchAddRequests', () => {
 
         const queueOperationInfo = await storageLocal.requestQueue(queueName).batchAddRequests([request]);
         expect(queueOperationInfo).toEqual<BatchAddRequestsResult>({
-            processedRequests: [{
-                requestId: uniqueKeyToRequestId(request.url),
-                uniqueKey: request.uniqueKey,
-                wasAlreadyHandled: true,
-                wasAlreadyPresent: true,
-            }],
+            processedRequests: [
+                {
+                    requestId: uniqueKeyToRequestId(request.url),
+                    uniqueKey: request.uniqueKey,
+                    wasAlreadyHandled: true,
+                    wasAlreadyPresent: true,
+                },
+            ],
             unprocessedRequests: [],
         });
         expect(counter.requests(queueName)).toBe(startCount);
@@ -653,12 +675,14 @@ describe('batchAddRequests', () => {
 
         const queueOperationInfo = await storageLocal.requestQueue(queueName).batchAddRequests([request]);
         expect(queueOperationInfo).toEqual<BatchAddRequestsResult>({
-            processedRequests: [{
-                requestId: uniqueKeyToRequestId(request.url),
-                uniqueKey: request.uniqueKey,
-                wasAlreadyHandled: false,
-                wasAlreadyPresent: true,
-            }],
+            processedRequests: [
+                {
+                    requestId: uniqueKeyToRequestId(request.url),
+                    uniqueKey: request.uniqueKey,
+                    wasAlreadyHandled: false,
+                    wasAlreadyPresent: true,
+                },
+            ],
             unprocessedRequests: [],
         });
         expect(counter.requests(queueName)).toBe(startCount);
@@ -674,11 +698,14 @@ describe('batchAddRequests', () => {
 
         await storageLocal.requestQueue(queueName).batchAddRequests([newRequest1, newRequest2], { forefront: true });
         expect(counter.requests(queueName)).toBe(startCount + 2);
-        const firstId = db.prepare(`
+        const firstId = db
+            .prepare(`
             SELECT id FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND orderNo IS NOT NULL
             LIMIT 1
-        `).pluck().get();
+        `)
+            .pluck()
+            .get();
         expect(firstId).toBe(newRequestId1);
     });
 
@@ -792,10 +819,12 @@ describe('updateRequest', () => {
             wasAlreadyHandled: false,
         });
 
-        const requestModel = db.prepare(`
+        const requestModel = db
+            .prepare(`
             SELECT * FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND id = ?
-        `).get(request.id) as any;
+        `)
+            .get(request.id) as any;
 
         expect(requestModel.method).toBe(method);
         expect(requestModel.retryCount).toBe(retryCount);
@@ -843,11 +872,14 @@ describe('updateRequest', () => {
     test('forefront moves request to queue head', async () => {
         await storageLocal.requestQueue(queueName).updateRequest(request, { forefront: true });
         expect(counter.requests(queueName)).toBe(startCount);
-        const requestId = db.prepare(`
+        const requestId = db
+            .prepare(`
             SELECT id FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND orderNo IS NOT NULL
             LIMIT 1
-        `).pluck().get();
+        `)
+            .pluck()
+            .get();
         expect(requestId).toBe(request.id);
     });
 
@@ -905,10 +937,12 @@ describe.skip('deleteRequest', () => {
 
     test('deletes request', async () => {
         await storageLocal.requestQueue(queueName).deleteRequest(request.id!);
-        const requestModel = db.prepare(`
+        const requestModel = db
+            .prepare(`
             SELECT * FROM ${REQUESTS_TABLE_NAME}
             WHERE queueId = ${QUEUE_ID} AND id = ?
-        `).get(request.id);
+        `)
+            .get(request.id);
         expect(requestModel).toBeUndefined();
         expect(counter.requests(queueName)).toBe(startCount - 1);
     });
@@ -943,9 +977,7 @@ describe('listHead', () => {
 
     test('fetches requests in correct order', async () => {
         const models = createRequestModels(queueName, startCount);
-        const expectedItems = models
-            .sort((a, b) => a.orderNo - b.orderNo)
-            .map((m) => JSON.parse(m.json));
+        const expectedItems = models.sort((a, b) => a.orderNo - b.orderNo).map((m) => JSON.parse(m.json));
 
         const { items } = await storageLocal.requestQueue(queueName).listHead();
         expect(items).toEqual(expectedItems);
@@ -990,7 +1022,7 @@ describe('listHead', () => {
 describe('RequestQueue v2', () => {
     const totalRequestsPerTest = 50;
 
-    function calculateHistogram(requests: { uniqueKey: string }[]) : number[] {
+    function calculateHistogram(requests: { uniqueKey: string }[]): number[] {
         const histogram: number[] = [];
         for (const item of requests) {
             const key = item.uniqueKey;
@@ -1086,10 +1118,12 @@ function seed(requestQueuesDir: string, dbConnections: DatabaseConnectionCache) 
 }
 
 function insertQueue(db: Database, queue: TestQueue) {
-    return db.prepare(`
+    return db
+        .prepare(`
         INSERT INTO ${STORAGE_NAMES.REQUEST_QUEUES}(name, totalRequestCount)
         VALUES(?, ?)
-    `).run(queue.name, queue.requestCount).lastInsertRowid as number;
+    `)
+        .run(queue.name, queue.requestCount).lastInsertRowid as number;
 }
 
 function insertRequests(db: Database, models: RequestModel[]) {
@@ -1145,7 +1179,9 @@ function createCounter(requestQueuesDir: string, dbConnections: DatabaseConnecti
                     queueDir: join(requestQueuesDir, queueName),
                     dbConnections,
                 });
-                const selectQueueCount = emulator.db.prepare(`SELECT COUNT(*) FROM ${STORAGE_NAMES.REQUEST_QUEUES}`).pluck();
+                const selectQueueCount = emulator.db
+                    .prepare(`SELECT COUNT(*) FROM ${STORAGE_NAMES.REQUEST_QUEUES}`)
+                    .pluck();
                 const queuesInDb = selectQueueCount.get();
                 if (queuesInDb !== 1) throw new Error('We have a queue database with more than 1 queue.');
                 count++;
@@ -1155,7 +1191,9 @@ function createCounter(requestQueuesDir: string, dbConnections: DatabaseConnecti
         requests(queueName: string) {
             const queueDir = join(requestQueuesDir, queueName);
             const emulator = new RequestQueueEmulator({ queueDir, dbConnections });
-            const selectRequestCount = emulator.db.prepare(`SELECT COUNT(*) FROM ${REQUESTS_TABLE_NAME} WHERE queueId = ${QUEUE_ID}`).pluck();
+            const selectRequestCount = emulator.db
+                .prepare(`SELECT COUNT(*) FROM ${REQUESTS_TABLE_NAME} WHERE queueId = ${QUEUE_ID}`)
+                .pluck();
             return selectRequestCount.get();
         },
     };
