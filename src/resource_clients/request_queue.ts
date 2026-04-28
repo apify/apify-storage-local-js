@@ -1,8 +1,9 @@
-import { join, dirname } from 'path';
+import { join, dirname } from 'node:path';
 import ow from 'ow';
 import { move, remove } from 'fs-extra';
 import type { DatabaseConnectionCache } from '../database_connection_cache';
-import { BatchAddRequestsResult, RequestQueueInfo, RequestQueueEmulator } from '../emulators/request_queue_emulator';
+import type { BatchAddRequestsResult, RequestQueueInfo} from '../emulators/request_queue_emulator';
+import { RequestQueueEmulator } from '../emulators/request_queue_emulator';
 import { mapRawDataToRequestQueueInfo, purgeNullsFromObject, uniqueKeyToRequestId } from '../utils';
 import type { QueueOperationInfo } from '../emulators/queue_operation_info';
 

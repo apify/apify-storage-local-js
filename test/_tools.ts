@@ -1,5 +1,5 @@
 import { emptyDirSync, ensureDirSync, removeSync } from 'fs-extra';
-import { join } from 'path';
+import { join } from 'node:path';
 
 export const TEMP_DIR = join(__dirname, 'tmp');
 

@@ -1,11 +1,11 @@
-import { join, parse } from 'path';
+import { join, parse } from 'node:path';
 import type { Database, Statement, Transaction, RunResult } from 'better-sqlite3';
 import { QueueOperationInfo } from './queue_operation_info';
 import { STORAGE_NAMES, TIMESTAMP_SQL, DATABASE_FILE_NAME } from '../consts';
 import type { DatabaseConnectionCache } from '../database_connection_cache';
 import type { ProlongRequestLockOptions, RequestModel, RequestOptions } from '../resource_clients/request_queue';
 import { ProcessedRequest } from './batch_add_requests/processed_request';
-import { UnprocessedRequest } from './batch_add_requests/unprocessed_request';
+import type { UnprocessedRequest } from './batch_add_requests/unprocessed_request';
 
 const ERROR_REQUEST_NOT_UNIQUE = 'SQLITE_CONSTRAINT_PRIMARYKEY';
 const ERROR_QUEUE_DOES_NOT_EXIST = 'SQLITE_CONSTRAINT_FOREIGNKEY';

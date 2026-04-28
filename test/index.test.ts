@@ -1,6 +1,6 @@
 import log from '@apify/log';
-import { join, resolve } from 'path';
-import { readdirSync } from 'fs';
+import { join, resolve } from 'node:path';
+import { readdirSync } from 'node:fs';
 import { ensureDir, ensureDirSync, statSync, writeFile, writeFileSync } from 'fs-extra';
 import { ApifyStorageLocal } from '../src';
 import { STORAGE_NAMES } from '../src/consts';
