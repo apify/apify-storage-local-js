@@ -6,8 +6,5 @@ minimumReleaseAgeExclude:
   - "apify"
   - "crawlee"
   - "got-scraping"
-  - "oxlint"
-  - "oxlint-tsgolint"
-  - "oxfmt"
 onlyBuiltDependencies:
   - better-sqlite3
