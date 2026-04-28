@@ -3,7 +3,7 @@
     "version": "2.3.1",
     "description": "Drop in replacement of Apify API with a local SQLite and filesystem implementation. Not all API features are supported.",
     "engines": {
-        "node": ">=18.0.0"
+        "node": ">=20.0.0"
     },
     "main": "dist/index.js",
     "module": "dist/index.mjs",
