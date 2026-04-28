@@ -2,7 +2,7 @@ import { join, dirname } from 'node:path';
 import ow from 'ow';
 import { move, remove } from 'fs-extra';
 import type { DatabaseConnectionCache } from '../database_connection_cache';
-import type { BatchAddRequestsResult, RequestQueueInfo} from '../emulators/request_queue_emulator';
+import type { BatchAddRequestsResult, RequestQueueInfo } from '../emulators/request_queue_emulator';
 import { RequestQueueEmulator } from '../emulators/request_queue_emulator';
 import { mapRawDataToRequestQueueInfo, purgeNullsFromObject, uniqueKeyToRequestId } from '../utils';
 import type { QueueOperationInfo } from '../emulators/queue_operation_info';
@@ -138,12 +138,15 @@ export class RequestQueueClient {
         return undefined;
     }
 
-    async update(newFields: { name?: string; }): Promise<RequestQueueInfo | undefined> {
+    async update(newFields: { name?: string }): Promise<RequestQueueInfo | undefined> {
         // The validation is intentionally loose to prevent issues
         // when swapping to a remote queue in production.
-        ow(newFields, ow.object.partialShape({
-            name: ow.optional.string.nonEmpty,
-        }));
+        ow(
+            newFields,
+            ow.object.partialShape({
+                name: ow.optional.string.nonEmpty,
+            }),
+        );
 
         if (!newFields.name) return;
 
@@ -176,13 +179,14 @@ export class RequestQueueClient {
     }
 
     async listHead(options: ListOptions = {}): Promise<QueueHead> {
-        ow(options, ow.object.exactShape({
-            limit: ow.optional.number,
-        }));
+        ow(
+            options,
+            ow.object.exactShape({
+                limit: ow.optional.number,
+            }),
+        );
 
-        const {
-            limit = 100,
-        } = options;
+        const { limit = 100 } = options;
 
         this._getEmulator().updateAccessedAtById(this.id);
         const requestJsons = this._getEmulator().selectRequestJsonsByQueueIdWithLimit(this.id, limit);
@@ -196,28 +200,42 @@ export class RequestQueueClient {
     }
 
     async addRequest(request: RequestModel, options: RequestOptions = {}): Promise<QueueOperationInfo> {
-        ow(request, ow.object.partialShape({
-            id: ow.undefined,
-            ...requestShape,
-        }));
+        ow(
+            request,
+            ow.object.partialShape({
+                id: ow.undefined,
+                ...requestShape,
+            }),
+        );
 
-        ow(options, ow.object.exactShape({
-            forefront: ow.optional.boolean,
-        }));
+        ow(
+            options,
+            ow.object.exactShape({
+                forefront: ow.optional.boolean,
+            }),
+        );
 
         const requestModel = this._createRequestModel(request, options.forefront);
         return this._getEmulator().addRequest(requestModel);
     }
 
     async batchAddRequests(requests: RequestModel[], options: RequestOptions = {}): Promise<BatchAddRequestsResult> {
-        ow(requests, ow.array.ofType(ow.object.partialShape({
-            id: ow.undefined,
-            ...requestShape,
-        })));
+        ow(
+            requests,
+            ow.array.ofType(
+                ow.object.partialShape({
+                    id: ow.undefined,
+                    ...requestShape,
+                }),
+            ),
+        );
 
-        ow(options, ow.object.exactShape({
-            forefront: ow.optional.boolean,
-        }));
+        ow(
+            options,
+            ow.object.exactShape({
+                forefront: ow.optional.boolean,
+            }),
+        );
 
         const requestModels = requests.map((request) => this._createRequestModel(request, options.forefront));
         return this._getEmulator().batchAddRequests(requestModels);
@@ -231,14 +249,20 @@ export class RequestQueueClient {
     }
 
     async updateRequest(request: RequestModel, options: RequestOptions = {}): Promise<QueueOperationInfo> {
-        ow(request, ow.object.partialShape({
-            id: ow.string,
-            ...requestShape,
-        }));
+        ow(
+            request,
+            ow.object.partialShape({
+                id: ow.string,
+                ...requestShape,
+            }),
+        );
 
-        ow(options, ow.object.exactShape({
-            forefront: ow.optional.boolean,
-        }));
+        ow(
+            options,
+            ow.object.exactShape({
+                forefront: ow.optional.boolean,
+            }),
+        );
 
         const requestModel = this._createRequestModel(request, options.forefront);
         return this._getEmulator().updateRequest(requestModel);
@@ -252,10 +276,13 @@ export class RequestQueueClient {
 
     async prolongRequestLock(id: string, options: ProlongRequestLockOptions): Promise<ProlongRequestLockResult> {
         ow(id, ow.string);
-        ow(options, ow.object.exactShape({
-            lockSecs: ow.number,
-            forefront: ow.optional.boolean,
-        }));
+        ow(
+            options,
+            ow.object.exactShape({
+                lockSecs: ow.number,
+                forefront: ow.optional.boolean,
+            }),
+        );
 
         this._getEmulator().updateAccessedAtById(this.id);
         const lockExpiresAt = this._getEmulator().prolongRequestLock(id, options);
@@ -265,24 +292,27 @@ export class RequestQueueClient {
 
     async deleteRequestLock(id: string, options: RequestOptions = {}) {
         ow(id, ow.string);
-        ow(options, ow.object.exactShape({
-            forefront: ow.optional.boolean,
-        }));
+        ow(
+            options,
+            ow.object.exactShape({
+                forefront: ow.optional.boolean,
+            }),
+        );
 
         this._getEmulator().updateAccessedAtById(this.id);
         this._getEmulator().deleteRequestLock(id, options);
     }
 
     async listAndLockHead(options: ListAndLockOptions): Promise<ListAndLockHeadResult> {
-        ow(options, ow.object.exactShape({
-            limit: ow.optional.number.lessThanOrEqual(25),
-            lockSecs: ow.number,
-        }));
+        ow(
+            options,
+            ow.object.exactShape({
+                limit: ow.optional.number.lessThanOrEqual(25),
+                lockSecs: ow.number,
+            }),
+        );
 
-        const {
-            limit = 25,
-            lockSecs,
-        } = options;
+        const { limit = 25, lockSecs } = options;
 
         this._getEmulator().updateAccessedAtById(this.id);
         const requestJsons = this._getEmulator().listAndLockHead(this.id, limit, lockSecs);

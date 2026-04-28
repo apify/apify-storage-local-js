@@ -15,7 +15,7 @@ export const enum STORAGE_TYPES {
     REQUEST_QUEUE = 'Request queue',
     KEY_VALUE_STORE = 'Key-value store',
     DATASET = 'Dataset',
-};
+}
 
 /**
  * Names of all emulated storages.
@@ -24,7 +24,7 @@ export const enum STORAGE_NAMES {
     REQUEST_QUEUES = 'request_queues',
     KEY_VALUE_STORES = 'key_value_stores',
     DATASETS = 'datasets',
-};
+}
 
 /**
  * Name of the request queue master database file.

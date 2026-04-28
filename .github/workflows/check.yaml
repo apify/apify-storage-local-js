@@ -56,3 +56,17 @@ jobs:
             -   name: Install pnpm and dependencies
                 uses: apify/workflows/pnpm-install@main
             -   run: pnpm lint
+
+    format-check:
+        name: Format check
+        runs-on: ubuntu-latest
+
+        steps:
+            -   uses: actions/checkout@v5
+            -   name: Use Node.js 24
+                uses: actions/setup-node@v6
+                with:
+                    node-version: 24
+            -   name: Install pnpm and dependencies
+                uses: apify/workflows/pnpm-install@main
+            -   run: pnpm format:check

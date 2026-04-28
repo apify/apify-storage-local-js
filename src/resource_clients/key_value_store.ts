@@ -1,4 +1,15 @@
-import { stat, move, remove, readdir, createReadStream, readFile, utimes, createWriteStream, writeFile, unlink } from 'fs-extra';
+import {
+    stat,
+    move,
+    remove,
+    readdir,
+    createReadStream,
+    readFile,
+    utimes,
+    createWriteStream,
+    writeFile,
+    unlink,
+} from 'fs-extra';
 import mime from 'mime-types';
 import ow from 'ow';
 import { join, dirname, parse, resolve } from 'node:path';
@@ -9,7 +20,21 @@ import { maybeParseBody } from '../body_parser';
 import { DEFAULT_API_PARAM_LIMIT } from '../consts';
 
 const DEFAULT_LOCAL_FILE_EXTENSION = 'bin';
-const COMMON_LOCAL_FILE_EXTENSIONS = ['json', 'jpeg', 'png', 'html', 'jpg', 'bin', 'txt', 'xml', 'pdf', 'mp3', 'js', 'css', 'csv'];
+const COMMON_LOCAL_FILE_EXTENSIONS = [
+    'json',
+    'jpeg',
+    'png',
+    'html',
+    'jpg',
+    'bin',
+    'txt',
+    'xml',
+    'pdf',
+    'mp3',
+    'js',
+    'css',
+    'csv',
+];
 
 const streamFinished = util.promisify(stream.finished);
 
@@ -95,9 +120,12 @@ export class KeyValueStoreClient {
     async update(newFields: KeyValueStoreClientUpdateOptions): Promise<Record<string, unknown>> {
         // The validation is intentionally loose to prevent issues
         // when swapping to a remote storage in production.
-        ow(newFields, ow.object.partialShape({
-            name: ow.optional.string.minLength(1),
-        }));
+        ow(
+            newFields,
+            ow.object.partialShape({
+                name: ow.optional.string.minLength(1),
+            }),
+        );
 
         if (!newFields.name) return {};
 
@@ -123,15 +151,15 @@ export class KeyValueStoreClient {
     }
 
     async listKeys(options: KeyValueStoreClientListOptions = {}): Promise<KeyValueStoreClientListData> {
-        ow(options, ow.object.exactShape({
-            limit: ow.optional.number.greaterThan(0),
-            exclusiveStartKey: ow.optional.string,
-        }));
+        ow(
+            options,
+            ow.object.exactShape({
+                limit: ow.optional.number.greaterThan(0),
+                exclusiveStartKey: ow.optional.string,
+            }),
+        );
 
-        const {
-            limit = DEFAULT_API_PARAM_LIMIT,
-            exclusiveStartKey,
-        } = options;
+        const { limit = DEFAULT_API_PARAM_LIMIT, exclusiveStartKey } = options;
 
         let files!: string[];
         try {
@@ -175,9 +203,7 @@ export class KeyValueStoreClient {
         const lastItemInStore = items[items.length - 1];
         const lastSelectedItem = limitedItems[limitedItems.length - 1];
         const isLastSelectedItemAbsolutelyLast = lastItemInStore === lastSelectedItem;
-        const nextExclusiveStartKey = isLastSelectedItemAbsolutelyLast
-            ? undefined
-            : lastSelectedItem.key;
+        const nextExclusiveStartKey = isLastSelectedItemAbsolutelyLast ? undefined : lastSelectedItem.key;
 
         this._updateTimestamps();
         return {
@@ -206,15 +232,21 @@ export class KeyValueStoreClient {
         }
     }
 
-    async getRecord(key: string, options: KeyValueStoreClientGetRecordOptions = {}): Promise<KeyValueStoreRecord | undefined> {
+    async getRecord(
+        key: string,
+        options: KeyValueStoreClientGetRecordOptions = {},
+    ): Promise<KeyValueStoreRecord | undefined> {
         ow(key, ow.string);
-        ow(options, ow.object.exactShape({
-            buffer: ow.optional.boolean,
-            stream: ow.optional.boolean,
-            // This option is ignored, but kept here
-            // for validation consistency with API client.
-            disableRedirect: ow.optional.boolean,
-        }));
+        ow(
+            options,
+            ow.object.exactShape({
+                buffer: ow.optional.boolean,
+                stream: ow.optional.boolean,
+                // This option is ignored, but kept here
+                // for validation consistency with API client.
+                disableRedirect: ow.optional.boolean,
+            }),
+        );
 
         const handler = options.stream ? createReadStream : readFile;
 
@@ -247,11 +279,14 @@ export class KeyValueStoreClient {
     }
 
     async setRecord(record: KeyValueStoreRecord): Promise<void> {
-        ow(record, ow.object.exactShape({
-            key: ow.string,
-            value: ow.any(ow.null, ow.string, ow.number, ow.object),
-            contentType: ow.optional.string.nonEmpty,
-        }));
+        ow(
+            record,
+            ow.object.exactShape({
+                key: ow.string,
+                value: ow.any(ow.null, ow.string, ow.number, ow.object),
+                contentType: ow.optional.string.nonEmpty,
+            }),
+        );
 
         const { key } = record;
         let { value, contentType } = record;
@@ -370,7 +405,7 @@ export class KeyValueStoreClient {
         throw err;
     }
 
-    private _updateTimestamps({ mtime }: { mtime?: boolean; } = {}) {
+    private _updateTimestamps({ mtime }: { mtime?: boolean } = {}) {
         // It's throwing EINVAL on Windows. Not sure why,
         // so the function is a best effort only.
         const now = new Date();
@@ -378,9 +413,10 @@ export class KeyValueStoreClient {
         if (mtime) {
             promise = utimes(this.storeDir, now, now);
         } else {
-            promise = stat(this.storeDir)
-                .then(async (stats) => utimes(this.storeDir, now, stats.mtime));
+            promise = stat(this.storeDir).then(async (stats) => utimes(this.storeDir, now, stats.mtime));
         }
-        promise.catch(() => { /* we don't care that much if it sometimes fails */ });
+        promise.catch(() => {
+            /* we don't care that much if it sometimes fails */
+        });
     }
 }

@@ -52,7 +52,7 @@ export class DatasetClient {
 
     itemCount?: number = undefined;
 
-    constructor({ name, storageDir } : DatasetClientOptions) {
+    constructor({ name, storageDir }: DatasetClientOptions) {
         this.name = name;
         this.storeDir = join(storageDir, name);
     }
@@ -81,9 +81,12 @@ export class DatasetClient {
     async update(newFields: DatasetClientUpdateOptions): Promise<Record<string, unknown>> {
         // The validation is intentionally loose to prevent issues
         // when swapping to a remote storage in production.
-        ow(newFields, ow.object.partialShape({
-            name: ow.optional.string.minLength(1),
-        }));
+        ow(
+            newFields,
+            ow.object.partialShape({
+                name: ow.optional.string.minLength(1),
+            }),
+        );
         if (!newFields.name) return {};
 
         const newPath = join(dirname(this.storeDir), newFields.name);
@@ -116,26 +119,28 @@ export class DatasetClient {
     async listItems(options: DatasetClientListOptions = {}): Promise<PaginationList> {
         this._ensureItemCount();
         // The extra code is to enable a custom validation message.
-        ow(options, ow.object.validate((value) => ({
-            validator: ow.isValid(value, ow.object.exactShape({
-                // clean: ow.optional.boolean,
-                desc: ow.optional.boolean,
-                // fields: ow.optional.array.ofType(ow.string),
-                // omit: ow.optional.array.ofType(ow.string),
-                limit: ow.optional.number,
-                offset: ow.optional.number,
-                // skipEmpty: ow.optional.boolean,
-                // skipHidden: ow.optional.boolean,
-                // unwind: ow.optional.string,
+        ow(
+            options,
+            ow.object.validate((value) => ({
+                validator: ow.isValid(
+                    value,
+                    ow.object.exactShape({
+                        // clean: ow.optional.boolean,
+                        desc: ow.optional.boolean,
+                        // fields: ow.optional.array.ofType(ow.string),
+                        // omit: ow.optional.array.ofType(ow.string),
+                        limit: ow.optional.number,
+                        offset: ow.optional.number,
+                        // skipEmpty: ow.optional.boolean,
+                        // skipHidden: ow.optional.boolean,
+                        // unwind: ow.optional.string,
+                    }),
+                ),
+                message: 'Local dataset emulation supports only the "desc", "limit" and "offset" options.',
             })),
-            message: 'Local dataset emulation supports only the "desc", "limit" and "offset" options.',
-        })));
+        );
 
-        const {
-            limit = LIST_ITEMS_LIMIT,
-            offset = 0,
-            desc,
-        } = options;
+        const { limit = LIST_ITEMS_LIMIT, offset = 0, desc } = options;
 
         const [start, end] = this._getStartAndEndIndexes(
             desc ? Math.max(this.itemCount! - offset - limit, 0) : offset,
@@ -160,11 +165,7 @@ export class DatasetClient {
 
     async pushItems(items: DataTypes): Promise<void> {
         this._ensureItemCount();
-        ow(items, ow.any(
-            ow.object,
-            ow.string,
-            ow.array.ofType(ow.any(ow.object, ow.string)),
-        ));
+        ow(items, ow.any(ow.object, ow.string, ow.array.ofType(ow.any(ow.object, ow.string))));
 
         items = this._normalizeItems(items);
         const promises = items.map(async (item) => {
@@ -195,9 +196,7 @@ export class DatasetClient {
             items = JSON.parse(items);
         }
 
-        return Array.isArray(items)
-            ? items.map(this._normalizeItem)
-            : [this._normalizeItem(items)];
+        return Array.isArray(items) ? items.map(this._normalizeItem) : [this._normalizeItem(items)];
     }
 
     private _normalizeItem(item: string | Record<string, unknown>) {
@@ -206,7 +205,9 @@ export class DatasetClient {
         }
 
         if (Array.isArray(item)) {
-            throw new Error(`Each dataset item can only be a single JSON object, not an array. Received: [${item.join(',\n')}]`);
+            throw new Error(
+                `Each dataset item can only be a single JSON object, not an array. Received: [${item.join(',\n')}]`,
+            );
         }
 
         return item;
@@ -261,7 +262,7 @@ export class DatasetClient {
         throw err;
     }
 
-    private _updateTimestamps({ mtime }: { mtime?: boolean; } = {}) {
+    private _updateTimestamps({ mtime }: { mtime?: boolean } = {}) {
         // It's throwing EINVAL on Windows. Not sure why,
         // so the function is a best effort only.
         const now = new Date();
@@ -269,9 +270,10 @@ export class DatasetClient {
         if (mtime) {
             promise = utimes(this.storeDir, now, now);
         } else {
-            promise = stat(this.storeDir)
-                .then(async (stats) => utimes(this.storeDir, now, stats.mtime));
+            promise = stat(this.storeDir).then(async (stats) => utimes(this.storeDir, now, stats.mtime));
         }
-        promise.catch(() => { /* we don't care that much if it sometimes fails */ });
+        promise.catch(() => {
+            /* we don't care that much if it sometimes fails */
+        });
     }
 }

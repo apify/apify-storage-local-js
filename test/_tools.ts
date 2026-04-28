@@ -9,9 +9,9 @@ export function prepareTestDir(): string {
     ensureDirSync(dir);
     emptyDirSync(dir);
     return dir;
-};
+}
 
 export function removeTestDir(name: string): void {
     const dir = join(TEMP_DIR, name);
     removeSync(dir);
-};
+}

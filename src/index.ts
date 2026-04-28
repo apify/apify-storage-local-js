@@ -70,10 +70,14 @@ export class ApifyStorageLocal {
     private isDatasetDirInitialized = false;
 
     constructor(options: ApifyStorageLocalOptions = {}) {
-        ow(options, 'ApifyStorageLocalOptions', ow.optional.object.exactShape({
-            storageDir: ow.optional.string,
-            enableWalMode: ow.optional.boolean,
-        }));
+        ow(
+            options,
+            'ApifyStorageLocalOptions',
+            ow.optional.object.exactShape({
+                storageDir: ow.optional.string,
+                enableWalMode: ow.optional.boolean,
+            }),
+        );
 
         /**
          * Returns the first argument which is not `undefined`.
@@ -84,7 +88,9 @@ export class ApifyStorageLocal {
         const enableWalMode = bool(process.env.APIFY_LOCAL_STORAGE_ENABLE_WAL_MODE) ?? options.enableWalMode ?? true;
 
         if (!pathExistsSync(storageDir)) {
-            log.info(`Created a data storage folder at ${storageDir}. You can override the path by setting the APIFY_LOCAL_STORAGE_DIR environment variable`);
+            log.info(
+                `Created a data storage folder at ${storageDir}. You can override the path by setting the APIFY_LOCAL_STORAGE_DIR environment variable`,
+            );
             ensureDirSync(storageDir);
         }
 
@@ -145,10 +151,13 @@ export class ApifyStorageLocal {
     requestQueue(id: string, options: RequestQueueOptions = {}): RequestQueueClient {
         ow(id, ow.string);
         // Matching the Client validation.
-        ow(options, ow.object.exactShape({
-            clientKey: ow.optional.string,
-            timeoutSecs: ow.optional.number,
-        }));
+        ow(
+            options,
+            ow.object.exactShape({
+                clientKey: ow.optional.string,
+                timeoutSecs: ow.optional.number,
+            }),
+        );
         this._ensureRequestQueueDir();
         return new RequestQueueClient({
             name: id,
@@ -167,10 +176,16 @@ export class ApifyStorageLocal {
         const defaultDatasetPath = resolve(this.datasetDir, LOCAL_ENV_VARS[ENV_VARS.DEFAULT_DATASET_ID]);
         await this.removeFiles(defaultDatasetPath);
 
-        const defaultKeyValueStorePath = resolve(this.keyValueStoreDir, LOCAL_ENV_VARS[ENV_VARS.DEFAULT_KEY_VALUE_STORE_ID]);
+        const defaultKeyValueStorePath = resolve(
+            this.keyValueStoreDir,
+            LOCAL_ENV_VARS[ENV_VARS.DEFAULT_KEY_VALUE_STORE_ID],
+        );
         await this.removeFiles(defaultKeyValueStorePath);
 
-        const defaultRequestQueuePath = resolve(this.requestQueueDir, LOCAL_ENV_VARS[ENV_VARS.DEFAULT_REQUEST_QUEUE_ID]);
+        const defaultRequestQueuePath = resolve(
+            this.requestQueueDir,
+            LOCAL_ENV_VARS[ENV_VARS.DEFAULT_REQUEST_QUEUE_ID],
+        );
         await this.removeFiles(defaultRequestQueuePath);
     }
 
@@ -226,7 +241,7 @@ export class ApifyStorageLocal {
 
             const innerStorageDir = resolve(storageDir, dirent.name);
 
-            let innerDirents = readdirSync(innerStorageDir).filter((fileName) => !(/(^|\/)\.[^/.]/g).test(fileName));
+            let innerDirents = readdirSync(innerStorageDir).filter((fileName) => !/(^|\/)\.[^/.]/g.test(fileName));
 
             if (storageType === STORAGE_TYPES.KEY_VALUE_STORE) {
                 innerDirents = innerDirents.filter((fileName) => !RegExp(KEY_VALUE_STORE_KEYS.INPUT).test(fileName));
@@ -239,10 +254,12 @@ export class ApifyStorageLocal {
 
         const dirsNo = dirsWithPreviousState.length;
         if (dirsNo) {
-            log.warning(`The following ${storageType} director${dirsNo === 1 ? 'y' : 'ies'} contain${dirsNo === 1 ? 's' : ''} a previous state:`
-                + `\n      ${dirsWithPreviousState.join('\n      ')}`
-                + '\n      If you did not intend to persist the state - '
-                + `please clear the respective director${dirsNo === 1 ? 'y' : 'ies'} and re-start the actor.`);
+            log.warning(
+                `The following ${storageType} director${dirsNo === 1 ? 'y' : 'ies'} contain${dirsNo === 1 ? 's' : ''} a previous state:` +
+                    `\n      ${dirsWithPreviousState.join('\n      ')}` +
+                    '\n      If you did not intend to persist the state - ' +
+                    `please clear the respective director${dirsNo === 1 ? 'y' : 'ies'} and re-start the actor.`,
+            );
         }
     }
 }
