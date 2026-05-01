@@ -159,11 +159,7 @@ export class RequestQueueClient {
         if (existsSync(newPath)) {
             throw new Error('Request queue name is not unique.');
         }
-        try {
-            await rename(this.queueDir, newPath);
-        } catch (err) {
-            throw err;
-        }
+        await rename(this.queueDir, newPath);
 
         this.name = newFields.name;
 
