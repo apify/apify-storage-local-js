@@ -427,13 +427,13 @@ describe('timestamps:', () => {
     const storeName = 'first';
     const testInitTimestamp = Date.now();
     let client: KeyValueStoreClient;
-    let spy: ReturnType<typeof jest.spyOn>;
+    let spy: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
         client = storageLocal.keyValueStore(storeName);
         // @ts-expect-error Spying on a private function
-        spy = jest.spyOn(client, '_updateTimestamps');
+        spy = vi.spyOn(client, '_updateTimestamps');
     });
 
     test('createdAt has a valid date', async () => {

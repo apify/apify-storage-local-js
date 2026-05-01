@@ -114,7 +114,7 @@ test('warning is shown when storage is non-empty', () => {
     ensureDirSync(innerDatasetDir);
     writeFileSync(join(innerDatasetDir, '000000001.json'), fileData);
 
-    const warnings = jest.spyOn(log, 'warning');
+    const warnings = vi.spyOn(log, 'warning');
 
     storageLocal.keyValueStores();
     storageLocal.requestQueues();

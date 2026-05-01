@@ -1,7 +1,7 @@
 import { emptyDirSync, ensureDirSync, removeSync } from 'fs-extra';
 import { join } from 'node:path';
 
-export const TEMP_DIR = join(__dirname, 'tmp');
+export const TEMP_DIR = join(import.meta.dirname, 'tmp');
 
 export function prepareTestDir(): string {
     const name = Math.random().toString(36).substring(2, 10) + Math.random().toString(36).substring(2, 10);
