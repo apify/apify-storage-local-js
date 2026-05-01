@@ -1,6 +1,6 @@
-import { ensureDirSync, pathExists, pathExistsSync, readdirSync } from 'fs-extra';
+import { existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { readdir, rm, access } from 'node:fs/promises';
 import ow from 'ow';
-import { readdir, rm } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import log from '@apify/log';
 import { ENV_VARS, KEY_VALUE_STORE_KEYS, LOCAL_ENV_VARS } from '@apify/consts';
@@ -87,11 +87,11 @@ export class ApifyStorageLocal {
         const storageDir = process.env.APIFY_LOCAL_STORAGE_DIR ?? options.storageDir ?? './apify_storage';
         const enableWalMode = bool(process.env.APIFY_LOCAL_STORAGE_ENABLE_WAL_MODE) ?? options.enableWalMode ?? true;
 
-        if (!pathExistsSync(storageDir)) {
+        if (!existsSync(storageDir)) {
             log.info(
                 `Created a data storage folder at ${storageDir}. You can override the path by setting the APIFY_LOCAL_STORAGE_DIR environment variable`,
             );
-            ensureDirSync(storageDir);
+            mkdirSync(storageDir, { recursive: true });
         }
 
         this.storageDir = storageDir;
@@ -190,7 +190,7 @@ export class ApifyStorageLocal {
     }
 
     private async removeFiles(folder: string): Promise<void> {
-        const storagePathExists = await pathExists(folder);
+        const storagePathExists = await access(folder).then(() => true, () => false);
 
         if (storagePathExists) {
             const direntNames = await readdir(folder);
@@ -210,7 +210,7 @@ export class ApifyStorageLocal {
 
     private _ensureDatasetDir() {
         if (!this.isDatasetDirInitialized) {
-            ensureDirSync(this.datasetDir);
+            mkdirSync(this.datasetDir, { recursive: true });
             this._checkIfStorageIsEmpty(STORAGE_TYPES.DATASET, this.datasetDir);
             this.isDatasetDirInitialized = true;
         }
@@ -218,7 +218,7 @@ export class ApifyStorageLocal {
 
     private _ensureKeyValueStoreDir() {
         if (!this.isKeyValueStoreDirInitialized) {
-            ensureDirSync(this.keyValueStoreDir);
+            mkdirSync(this.keyValueStoreDir, { recursive: true });
             this._checkIfStorageIsEmpty(STORAGE_TYPES.KEY_VALUE_STORE, this.keyValueStoreDir);
             this.isKeyValueStoreDirInitialized = true;
         }
@@ -226,7 +226,7 @@ export class ApifyStorageLocal {
 
     private _ensureRequestQueueDir() {
         if (!this.isRequestQueueDirInitialized) {
-            ensureDirSync(this.requestQueueDir);
+            mkdirSync(this.requestQueueDir, { recursive: true });
             this._checkIfStorageIsEmpty(STORAGE_TYPES.REQUEST_QUEUE, this.requestQueueDir);
             this.isRequestQueueDirInitialized = true;
         }

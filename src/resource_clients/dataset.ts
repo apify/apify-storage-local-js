@@ -1,4 +1,5 @@
-import { move, remove, stat, readdirSync, readFile, utimes, writeFile } from 'fs-extra';
+import { existsSync, readdirSync } from 'node:fs';
+import { rename, rm, stat, readFile, utimes, writeFile } from 'node:fs/promises';
 import ow from 'ow';
 import { join, dirname, parse } from 'node:path';
 import type { DatasetCollectionData } from './dataset_collection';
@@ -90,12 +91,13 @@ export class DatasetClient {
         if (!newFields.name) return {};
 
         const newPath = join(dirname(this.storeDir), newFields.name);
+        if (existsSync(newPath)) {
+            throw new Error('Dataset name is not unique.');
+        }
         try {
-            await move(this.storeDir, newPath);
+            await rename(this.storeDir, newPath);
         } catch (err) {
-            if (/dest already exists/.test(err.message)) {
-                throw new Error('Dataset name is not unique.');
-            } else if (err.code === 'ENOENT') {
+            if (err.code === 'ENOENT') {
                 this._throw404();
             } else {
                 throw err;
@@ -107,7 +109,7 @@ export class DatasetClient {
     }
 
     async delete(): Promise<void> {
-        await remove(this.storeDir);
+        await rm(this.storeDir, { recursive: true, force: true });
 
         this.itemCount = undefined;
     }

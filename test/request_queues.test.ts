@@ -1,6 +1,6 @@
 import { setTimeout as nativeSetTimeout } from 'node:timers';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { ensureDirSync, readdirSync } from 'fs-extra';
+import { mkdirSync, readdirSync } from 'node:fs';
 import { ArgumentError } from 'ow';
 import { join } from 'node:path';
 import type { Database, Statement } from 'better-sqlite3';
@@ -1107,7 +1107,7 @@ describe('RequestQueue v2', () => {
 function seed(requestQueuesDir: string, dbConnections: DatabaseConnectionCache) {
     Object.values(TEST_QUEUES).forEach((queue) => {
         const queueDir = join(requestQueuesDir, queue.name);
-        ensureDirSync(queueDir);
+        mkdirSync(queueDir, { recursive: true });
 
         const emulator = new RequestQueueEmulator({ queueDir, dbConnections });
         const id = insertQueue(emulator.db, queue);

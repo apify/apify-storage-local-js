@@ -1,7 +1,7 @@
-import { emptyDirSync, ensureDirSync } from 'fs-extra';
+import { mkdirSync, rmSync } from 'node:fs';
 import { TEMP_DIR } from './_tools';
 
 export default function globalSetup(): void {
-    ensureDirSync(TEMP_DIR);
-    emptyDirSync(TEMP_DIR);
+    rmSync(TEMP_DIR, { recursive: true, force: true });
+    mkdirSync(TEMP_DIR, { recursive: true });
 }

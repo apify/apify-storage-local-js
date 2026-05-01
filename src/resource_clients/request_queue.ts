@@ -1,6 +1,7 @@
+import { existsSync } from 'node:fs';
+import { rename, rm } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import ow from 'ow';
-import { move, remove } from 'fs-extra';
 import type { DatabaseConnectionCache } from '../database_connection_cache';
 import type { BatchAddRequestsResult, RequestQueueInfo } from '../emulators/request_queue_emulator';
 import { RequestQueueEmulator } from '../emulators/request_queue_emulator';
@@ -155,12 +156,12 @@ export class RequestQueueClient {
         // To prevent chaos, we close the database connection before moving the folder.
         this._getEmulator().disconnect();
 
+        if (existsSync(newPath)) {
+            throw new Error('Request queue name is not unique.');
+        }
         try {
-            await move(this.queueDir, newPath);
+            await rename(this.queueDir, newPath);
         } catch (err) {
-            if (/dest already exists/.test(err.message)) {
-                throw new Error('Request queue name is not unique.');
-            }
             throw err;
         }
 
@@ -175,7 +176,7 @@ export class RequestQueueClient {
     async delete(): Promise<void> {
         this._getEmulator().disconnect();
 
-        await remove(this.queueDir);
+        await rm(this.queueDir, { recursive: true, force: true });
     }
 
     async listHead(options: ListOptions = {}): Promise<QueueHead> {

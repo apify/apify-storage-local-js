@@ -1,4 +1,4 @@
-import { ensureDir } from 'fs-extra';
+import { mkdir } from 'node:fs/promises';
 import ow from 'ow';
 import { join } from 'node:path';
 import type { DatabaseConnectionCache } from '../database_connection_cache';
@@ -31,7 +31,7 @@ export class RequestQueueCollectionClient {
     async getOrCreate(name: string): Promise<RequestQueueInfo> {
         ow(name, ow.string.nonEmpty);
         const queueDir = join(this.storageDir, name);
-        await ensureDir(queueDir);
+        await mkdir(queueDir, { recursive: true });
         const emulator = new RequestQueueEmulator({
             queueDir,
             dbConnections: this.dbConnections,

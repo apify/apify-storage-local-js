@@ -1,7 +1,7 @@
 import log from '@apify/log';
+import { mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { readdirSync } from 'node:fs';
-import { ensureDir, ensureDirSync, statSync, writeFile, writeFileSync } from 'fs-extra';
 import { ApifyStorageLocal } from '../src';
 import { STORAGE_NAMES } from '../src/consts';
 import { prepareTestDir, removeTestDir } from './_tools';
@@ -44,7 +44,7 @@ test('creates folders lazily + purging', async () => {
         expect(statSync(dir).isDirectory()).toBe(true);
 
         const storagePath = resolve(dir, 'default');
-        await ensureDir(storagePath);
+        await mkdir(storagePath, { recursive: true });
 
         const fileData = JSON.stringify({ foo: 'bar' });
         await writeFile(join(storagePath, '000000001.json'), fileData);
@@ -103,15 +103,15 @@ test('warning is shown when storage is non-empty', () => {
     const innerDirName = 'default';
 
     const innerRequestQueueDir = join(requestQueueDir, innerDirName);
-    ensureDirSync(innerRequestQueueDir);
+    mkdirSync(innerRequestQueueDir, { recursive: true });
     writeFileSync(join(innerRequestQueueDir, '000000001.json'), fileData);
 
     const innerKeyValueStoreDir = join(keyValueStoreDir, innerDirName);
-    ensureDirSync(innerKeyValueStoreDir);
+    mkdirSync(innerKeyValueStoreDir, { recursive: true });
     writeFileSync(join(innerKeyValueStoreDir, 'INPUT.json'), fileData);
 
     const innerDatasetDir = join(datasetDir, innerDirName);
-    ensureDirSync(innerDatasetDir);
+    mkdirSync(innerDatasetDir, { recursive: true });
     writeFileSync(join(innerDatasetDir, '000000001.json'), fileData);
 
     const warnings = vi.spyOn(log, 'warning');

@@ -1,15 +1,5 @@
-import {
-    stat,
-    move,
-    remove,
-    readdir,
-    createReadStream,
-    readFile,
-    utimes,
-    createWriteStream,
-    writeFile,
-    unlink,
-} from 'fs-extra';
+import { createReadStream, createWriteStream, existsSync } from 'node:fs';
+import { stat, rename, rm, readdir, readFile, utimes, writeFile, unlink } from 'node:fs/promises';
 import mime from 'mime-types';
 import ow from 'ow';
 import { join, dirname, parse, resolve } from 'node:path';
@@ -130,12 +120,13 @@ export class KeyValueStoreClient {
         if (!newFields.name) return {};
 
         const newPath = join(dirname(this.storeDir), newFields.name);
+        if (existsSync(newPath)) {
+            throw new Error('Key-value store name is not unique.');
+        }
         try {
-            await move(this.storeDir, newPath);
+            await rename(this.storeDir, newPath);
         } catch (err) {
-            if (/dest already exists/.test(err.message)) {
-                throw new Error('Key-value store name is not unique.');
-            } else if (err.code === 'ENOENT') {
+            if (err.code === 'ENOENT') {
                 this._throw404();
             } else {
                 throw err;
@@ -147,7 +138,7 @@ export class KeyValueStoreClient {
     }
 
     async delete(): Promise<void> {
-        await remove(this.storeDir);
+        await rm(this.storeDir, { recursive: true, force: true });
     }
 
     async listKeys(options: KeyValueStoreClientListOptions = {}): Promise<KeyValueStoreClientListData> {

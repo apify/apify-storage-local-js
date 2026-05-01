@@ -1,4 +1,5 @@
-import { emptyDirSync, ensureDirSync, readdirSync, readFile, writeFileSync } from 'fs-extra';
+import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import stream from 'node:stream';
 import { ApifyStorageLocal } from '../src/index';
@@ -488,8 +489,7 @@ function seed(keyValueStoresDir: string) {
 
 function insertStore(dir: string, store: TestStore) {
     const storeDir = join(dir, store.name);
-    ensureDirSync(storeDir);
-    emptyDirSync(storeDir);
+    mkdirSync(storeDir, { recursive: true });
     return storeDir;
 }
 
