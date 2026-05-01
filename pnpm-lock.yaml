@@ -35,9 +35,6 @@ importers:
       ow:
         specifier: ^3.1.1
         version: 3.1.1
-      tslib:
-        specifier: ^2.8.1
-        version: 2.8.1
     devDependencies:
       '@apify/oxlint-config':
         specifier: ^0.2.5
@@ -1954,7 +1951,8 @@ snapshots:
 
   tinyrainbow@3.1.0: {}
 
-  tslib@2.8.1: {}
+  tslib@2.8.1:
+    optional: true
 
   tunnel-agent@0.6.0:
     dependencies:

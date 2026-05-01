@@ -190,7 +190,10 @@ export class ApifyStorageLocal {
     }
 
     private async removeFiles(folder: string): Promise<void> {
-        const storagePathExists = await access(folder).then(() => true, () => false);
+        const storagePathExists = await access(folder).then(
+            () => true,
+            () => false,
+        );
 
         if (storagePathExists) {
             const direntNames = await readdir(folder);

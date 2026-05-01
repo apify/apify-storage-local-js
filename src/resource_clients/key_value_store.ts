@@ -280,7 +280,7 @@ export class KeyValueStoreClient {
         );
 
         const { key } = record;
-        let { value, contentType } = record;
+        let { value, contentType }: { value: any; contentType: string | undefined } = record;
 
         const isValueStreamOrBuffer = isStream(value) || isBuffer(value);
         // To allow saving Objects to JSON without providing content type

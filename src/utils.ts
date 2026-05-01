@@ -49,8 +49,8 @@ export function uniqueKeyToRequestId(uniqueKey: string): string {
     return str.length > REQUEST_ID_LENGTH ? str.substr(0, REQUEST_ID_LENGTH) : str;
 }
 
-export function isBuffer(value: unknown): boolean {
-    return ow.isValid(value, ow.any(ow.buffer, ow.arrayBuffer, ow.typedArray));
+export function isBuffer(value: unknown): value is Buffer {
+    return Buffer.isBuffer(value) || value instanceof ArrayBuffer || ArrayBuffer.isView(value);
 }
 
 export function isStream(value: unknown): value is Readable {
