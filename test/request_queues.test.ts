@@ -1,6 +1,6 @@
 import { setTimeout as nativeSetTimeout } from 'node:timers';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { ensureDirSync, readdirSync } from 'fs-extra';
+import { mkdirSync, readdirSync } from 'node:fs';
 import { ArgumentError } from 'ow';
 import { join } from 'node:path';
 import type { Database, Statement } from 'better-sqlite3';
@@ -1072,7 +1072,7 @@ describe('RequestQueue v2', () => {
     });
 
     test('prolongRequestLock works as expected', async () => {
-        jest.useFakeTimers();
+        vi.useFakeTimers();
         const queue = await getEmptyQueue('prolong-request-lock');
         await queue.batchAddRequests(getUniqueRequests(1));
 
@@ -1080,15 +1080,15 @@ describe('RequestQueue v2', () => {
         await queue.prolongRequestLock(firstFetch[0].id, { lockSecs: 60 });
         expect(firstFetch).toHaveLength(1);
 
-        jest.advanceTimersByTime(65000);
+        vi.advanceTimersByTime(65000);
         const { items: secondFetch } = await queue.listAndLockHead({ limit: 1, lockSecs: 60 });
         expect(secondFetch).toHaveLength(0);
 
-        jest.advanceTimersByTime(65000);
+        vi.advanceTimersByTime(65000);
         const { items: thirdFetch } = await queue.listAndLockHead({ limit: 1, lockSecs: 60 });
 
         expect(thirdFetch).toHaveLength(1);
-        jest.useRealTimers();
+        vi.useRealTimers();
     });
 
     test('deleteRequestLock works as expected', async () => {
@@ -1107,7 +1107,7 @@ describe('RequestQueue v2', () => {
 function seed(requestQueuesDir: string, dbConnections: DatabaseConnectionCache) {
     Object.values(TEST_QUEUES).forEach((queue) => {
         const queueDir = join(requestQueuesDir, queue.name);
-        ensureDirSync(queueDir);
+        mkdirSync(queueDir, { recursive: true });
 
         const emulator = new RequestQueueEmulator({ queueDir, dbConnections });
         const id = insertQueue(emulator.db, queue);

@@ -1,4 +1,5 @@
-import { emptyDirSync, ensureDirSync, readdirSync, readFile, writeJsonSync } from 'fs-extra';
+import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { ApifyStorageLocal } from '../src/index';
 import { STORAGE_NAMES } from '../src/consts';
@@ -288,15 +289,14 @@ function seed(datasetsDir: string) {
 
 function insertDataset(dir: string, dataset: TestDataset) {
     const datasetDir = join(dir, dataset.name);
-    ensureDirSync(datasetDir);
-    emptyDirSync(datasetDir);
+    mkdirSync(datasetDir, { recursive: true });
     return datasetDir;
 }
 
 function insertItems(dir: string, items: DatasetRecord[]) {
     items.forEach((item) => {
         const filePath = join(dir, item.filename);
-        writeJsonSync(filePath, item);
+        writeFileSync(filePath, JSON.stringify(item));
     });
 }
 

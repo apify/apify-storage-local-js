@@ -1,4 +1,4 @@
-import { ensureDir, stat } from 'fs-extra';
+import { mkdir, stat } from 'node:fs/promises';
 import ow from 'ow';
 import { join } from 'node:path';
 
@@ -31,7 +31,7 @@ export class DatasetCollectionClient {
     async getOrCreate(name: string): Promise<DatasetCollectionData> {
         ow(name, ow.string.nonEmpty);
         const storePath = join(this.storageDir, name);
-        await ensureDir(storePath);
+        await mkdir(storePath, { recursive: true });
         const stats = await stat(storePath);
         return {
             id: name,

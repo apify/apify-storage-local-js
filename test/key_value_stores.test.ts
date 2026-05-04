@@ -1,4 +1,5 @@
-import { emptyDirSync, ensureDirSync, readdirSync, readFile, writeFileSync } from 'fs-extra';
+import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import stream from 'node:stream';
 import { ApifyStorageLocal } from '../src/index';
@@ -427,13 +428,13 @@ describe('timestamps:', () => {
     const storeName = 'first';
     const testInitTimestamp = Date.now();
     let client: KeyValueStoreClient;
-    let spy: ReturnType<typeof jest.spyOn>;
+    let spy: ReturnType<typeof vi.spyOn>;
 
     beforeEach(() => {
-        jest.clearAllMocks();
+        vi.clearAllMocks();
         client = storageLocal.keyValueStore(storeName);
         // @ts-expect-error Spying on a private function
-        spy = jest.spyOn(client, '_updateTimestamps');
+        spy = vi.spyOn(client, '_updateTimestamps');
     });
 
     test('createdAt has a valid date', async () => {
@@ -488,8 +489,7 @@ function seed(keyValueStoresDir: string) {
 
 function insertStore(dir: string, store: TestStore) {
     const storeDir = join(dir, store.name);
-    ensureDirSync(storeDir);
-    emptyDirSync(storeDir);
+    mkdirSync(storeDir, { recursive: true });
     return storeDir;
 }
 
