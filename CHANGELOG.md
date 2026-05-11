@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+<!-- git-cliff-unreleased-start -->
+## 3.0.1 - **not yet released**
+
+
+<!-- git-cliff-unreleased-end -->
 ## [3.0.0](https://github.com/apify/apify-storage-local-js/releases/tag/v3.0.0) (2026-05-05)
 
 ### 🐛 Bug Fixes
