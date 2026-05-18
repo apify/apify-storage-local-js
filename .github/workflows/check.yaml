@@ -39,7 +39,7 @@ jobs:
                 with:
                     node-version: ${{ matrix.node-version }}
             -   name: Install pnpm and dependencies
-                uses: apify/workflows/pnpm-install@main
+                uses: apify/actions/pnpm-install@v1.0.0
             -   name: Run Tests
                 run: pnpm test
 
@@ -54,7 +54,7 @@ jobs:
                 with:
                     node-version: 24
             -   name: Install pnpm and dependencies
-                uses: apify/workflows/pnpm-install@main
+                uses: apify/actions/pnpm-install@v1.0.0
             -   run: pnpm lint
 
     format-check:
@@ -68,5 +68,5 @@ jobs:
                 with:
                     node-version: 24
             -   name: Install pnpm and dependencies
-                uses: apify/workflows/pnpm-install@main
+                uses: apify/actions/pnpm-install@v1.0.0
             -   run: pnpm format:check
