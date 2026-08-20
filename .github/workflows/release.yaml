@@ -55,12 +55,12 @@ jobs:
 
         steps:
             - name: Checkout repository
-              uses: actions/checkout@v6
+              uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
               with:
                   token: ${{ secrets.APIFY_SERVICE_ACCOUNT_GITHUB_TOKEN }}
 
             - name: Use Node.js
-              uses: actions/setup-node@v6
+              uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
               with:
                   node-version: 24
 
@@ -71,7 +71,7 @@ jobs:
               run: pnpm version --no-git-tag-version --allow-same-version ${{ needs.release_metadata.outputs.version_number }}
 
             - name: Update CHANGELOG.md
-              uses: DamianReeves/write-file-action@master
+              uses: DamianReeves/write-file-action@{"message":"Not # master
               with:
                   path: CHANGELOG.md
                   write-mode: overwrite
@@ -93,7 +93,7 @@ jobs:
             GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         steps:
             - name: Create release
-              uses: softprops/action-gh-release@v2
+              uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
               with:
                   tag_name: ${{ needs.release_metadata.outputs.tag_name }}
                   name: ${{ needs.release_metadata.outputs.version_number }}
